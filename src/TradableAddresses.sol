@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.21;
 
-import {NFT_ERC6909} from "./utils/NFT_ERC6909.sol";
+import {ERC1155Unique} from "./utils/ERC1155Unique.sol";
 import {ITradableAddresses} from "./interfaces/ITradableAddresses.sol";
 import {DeployProxy} from "./DeployProxy.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract TradableAddresses is NFT_ERC6909, ITradableAddresses {
+contract TradableAddresses is ERC1155Unique, ITradableAddresses {
     error NotSaltOwner();
     error NotOwnerOrOperator();
+    error AlreadyDeployed();
 
     bytes32 public immutable DEPLOY_PROXY_INITHASH;
 
@@ -16,26 +17,44 @@ contract TradableAddresses is NFT_ERC6909, ITradableAddresses {
 
     address private _deploySource = NO_DEPLOY_SOURCE;
 
+    struct Salt {
+        address owner;
+        bool deployed;
+    }
+
+    mapping(address => Salt) public salts;
+
     constructor() {
         DEPLOY_PROXY_INITHASH = keccak256(type(DeployProxy).creationCode);
     }
 
-    modifier checkSaltOwner(bytes32 salt) {
-        if (address(bytes20(salt)) != msg.sender) revert NotSaltOwner();
-        _;
-    }
+    function deployWithSource(uint salt, address source) external {
+        if (!approvedOrOwner(msg.sender, salt)) revert NotOwnerOrOperator();
+        salts[salt].deployed = true;
+        _burn(salt);
 
-    function deployWithSource(bytes32 salt, address source) external {
-        uint256 id = saltToId(salt);
-        if (!ownerOrOperater(msg.sender, id)) revert NotOwnerOrOperator();
-        _burn(id);
         _deploySource = source;
-        new DeployProxy{salt: salt}();
+        new DeployProxy{salt: bytes32(salt)}();
         _deploySource = NO_DEPLOY_SOURCE;
     }
 
-    function mintOwnedSalt(address to, bytes32 salt) external checkSaltOwner(salt) {
-        _mint(to, saltToId(salt));
+    function mintOwnedSalt(address to, uint256 salt) public {
+        _checkNewSalt(salt);
+        _mint(to, salt, new bytes(0));
+    }
+
+    function mintOwnedSalts(address to, uint256[] memory newSalts) public {
+        uint256 saltsLength = newSalts.length;
+        unchecked {
+            for (uint256 i = 0; i < saltsLength; i++) {
+                _checkNewSalt(newSalts[i]);
+            }
+        }
+        _batchMint(to, newSalts, new bytes(0));
+    }
+
+    function ownerOf(uint256 id) public view override returns (address) {
+        return salts[id].owner;
     }
 
     function getDeploySource() external view returns (address src) {
@@ -43,24 +62,21 @@ contract TradableAddresses is NFT_ERC6909, ITradableAddresses {
         if (src == NO_DEPLOY_SOURCE) revert NoDeploySourceAvailable();
     }
 
-    function ownerOrOperater(address operator, uint256 id) public view returns (bool) {
-        address owner = ownerOf(id);
-        return operator == owner || isOperator(owner, operator);
+    function approvedOrOwner(address operator, uint256 id) public view returns (bool) {
+        address owner = ownerOf[id];
+        return operator == owner || isApprovedForAll[owner][operator];
     }
 
-    function saltToId(bytes32 salt) public pure returns (uint256) {
-        return uint256(salt);
+    function uri(uint256) public pure override returns (string memory) {
+        return "TODO";
     }
 
-    function name(uint256) public pure override returns (string memory) {
-        return "Tradable Addresses";
+    function _setOwnerOf(uint256 id, address owner) internal override {
+        salts[id].owner = owner;
     }
 
-    function symbol(uint256) public pure override returns (string memory) {
-        return "ADDR";
-    }
-
-    function tokenURI(uint256) public pure override returns (string memory) {
-        return "broooooooooooooooooooooooooo";
+    function _checkNewSalt(uint256 salt) internal view {
+        if (address(uint160(salt >> 96)) != msg.sender) revert NotSaltOwner();
+        if (salts[salt].deployed) revert AlreadyDeployed();
     }
 }
