@@ -51,6 +51,12 @@ library TransientBytesLib {
         }
     }
 
+    function reset(TransientBytes storage self) internal {
+        uint256 len = self.length();
+        uint256 slotsToWipe = 1 + (len - (32 - LENGTH_BYTES) + 31) / 32;
+        self.wipeRange(0, slotsToWipe);
+    }
+
     function wipeRange(TransientBytes storage self, uint256 startSlotOffset, uint256 endSlotOffset) internal {
         if (startSlotOffset > endSlotOffset) revert OutOfOrderSlots();
         if (endSlotOffset > LENGTH_MASK) revert RangeTooLarge();
