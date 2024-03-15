@@ -10,6 +10,9 @@ library BytesLib {
         }
     }
 
+    /**
+     * @dev Decodes an ABI-encoded (bytes) e.g. the result of `abi.encode(data: bytes)`.
+     */
     function decodeBytes(bytes memory encodedBytes) internal pure returns (bytes memory decoded) {
         /// @solidity memory-safe-assembly
         assembly {

@@ -19,8 +19,7 @@ library TransientBytesLib {
     uint256 internal constant LENGTH_BYTES = 4;
 
     function length(TransientBytes storage self) internal view returns (uint256 len) {
-        /// @solidity memory-safe-assembly
-        assembly {
+        assembly ("memory-safe") {
             mstore(0x00, self.slot)
             let slot := keccak256(0x00, 0x20)
             len := shr(sub(256, mul(LENGTH_BYTES, 8)), sload(slot))
@@ -28,8 +27,7 @@ library TransientBytesLib {
     }
 
     function store(TransientBytes storage self, bytes calldata content) internal {
-        /// @solidity memory-safe-assembly
-        assembly {
+        assembly ("memory-safe") {
             let len := content.length
 
             if iszero(lt(len, add(LENGTH_MASK, 1))) {
@@ -46,7 +44,6 @@ library TransientBytesLib {
             sstore(slot, firstWord)
 
             // Store remainder.
-            let offset := add(content, 0x20)
             for { let i := sub(0x20, LENGTH_BYTES) } lt(i, len) { i := add(i, 0x20) } {
                 slot := add(slot, 1)
                 sstore(slot, calldataload(add(content.offset, i)))
@@ -54,37 +51,23 @@ library TransientBytesLib {
         }
     }
 
-    function wipeRange(TransientBytes storage self, uint startSlotOffset, uint endSlotOffset) internal {
+    function wipeRange(TransientBytes storage self, uint256 startSlotOffset, uint256 endSlotOffset) internal {
         if (startSlotOffset > endSlotOffset) revert OutOfOrderSlots();
         if (endSlotOffset > LENGTH_MASK) revert RangeTooLarge();
-        /// @solidity memory-safe-assembly
-        assembly {
+        assembly ("memory-safe") {
             // Derive slot where data is actually stored.
             mstore(0x00, self.slot)
             let slot := keccak256(0x00, 0x20)
             // Wipe range.
-            let endSlot := add(slot, endSlotOffset)
-            for { let offset := sub(0x20, LENGTH_BYTES) } lt(offset, len) { offset := add(offset, 0x20) } {
-                slot := add(slot, 1)
-                sstore(slot, 1)
-            }
-        }
-
-    }
-
-    /**
-     * @dev Initializes the transient bytes storage slots to be initialized to a non-zero value for
-     * a value up to length `len`.
-     */
-    function wipe(TransientBytes storage self, uint256 len) internal {
-        /// @solidity memory-safe-assembly
-        assembly {
+            for {
+                let currentSlot := add(slot, startSlotOffset)
+                let endSlot := add(slot, endSlotOffset)
+            } lt(currentSlot, endSlot) { currentSlot := add(currentSlot, 1) } { sstore(currentSlot, 1) }
         }
     }
 
     function load(TransientBytes storage self) internal view returns (bytes memory value) {
-        /// @solidity memory-safe-assembly
-        assembly {
+        assembly ("memory-safe") {
             // Derive slot.
             mstore(0x00, self.slot)
             let slot := keccak256(0x00, 0x20)
@@ -101,12 +84,10 @@ library TransientBytesLib {
             let endOffset := add(value, add(0x20, len))
             mstore(0x40, endOffset)
             // Load & Store remaining bytes.
-            for { let offset := sub(0x20, LENGTH_BYTES) } lt(offset, len) { offset := add(offset, 0x20) } {
+            for {} lt(offset, endOffset) { offset := add(offset, 0x20) } {
                 slot := add(slot, 1)
                 mstore(offset, sload(slot))
             }
-            // Override dirty bytes & ensure padded with zeros.
-            mstore(endOffset, 0)
         }
     }
 }

@@ -1,5 +1,5 @@
-// SPDX-License-Identifier: MIT
-pragma solidity 0.8.21;
+// SPDX-License-Identifier: AGPL-3.0-only
+pragma solidity ^0.8.24;
 
 import {ITradableAddresses} from "./interfaces/ITradableAddresses.sol";
 import {IDeploySource} from "./interfaces/IDeploySource.sol";
@@ -12,20 +12,17 @@ import {BytesLib} from "./utils/BytesLib.sol";
 contract DeployProxy {
     using BytesLib for bytes;
 
-    error InvalidSource();
-    error FailedToRetrieveSource();
-    error EmptySourceReturned();
+    error InitializationFailed();
 
     constructor() {
-        address deploySrc = ITradableAddresses(msg.sender).getDeploySource();
+        address source = ITradableAddresses(msg.sender).getDeploySource();
+        (bytes memory runtime, address initializer, bytes memory initializerPayload) = IDeploySource(source).get();
 
-        if (deploySrc == address(0) || deploySrc.code.length == 0) revert InvalidSource();
-
-        // Delegatecall allows source to make initializing state mutations if necessary.
-        (bool success, bytes memory retBytes) = deploySrc.delegatecall(abi.encodeCall(IDeploySource.prepareRuntime, ()));
-        if (!success) revert FailedToRetrieveSource();
-        bytes memory runtime = retBytes.decodeBytes();
-        if (runtime.length == 0) revert EmptySourceReturned();
+        // Optional initializer that can do initial state mutations on behalf of the new contract.
+        if (initializer != address(0)) {
+            (bool success,) = initializer.delegatecall(initializerPayload);
+            if (!success) revert InitializationFailed();
+        }
 
         runtime.directReturn();
     }
