@@ -133,30 +133,28 @@ abstract contract ERC1155Unique {
     //////////////////////////////////////////////////////////////*/
 
     function _mint(address to, uint256 id, bytes memory data) internal virtual {
-        ownerOf[id] = to;
-
+        _setOwnerOf(id, to);
         emit TransferSingle(msg.sender, address(0), to, id, 1);
         _doReceiveCheck(address(0), to, id, data);
     }
 
-    function _batchMint(address to, uint256[] memory ids, bytes memory data) internal virtual {
-        uint256 idsLength = ids.length; // Saves MLOADs.
-
+    function _batchMint(address to, uint256[] calldata ids) internal virtual {
+        uint256 idsLength = ids.length;
         uint256[] memory amounts = new uint256[](idsLength);
 
         unchecked {
             for (uint256 i = 0; i < idsLength; ++i) {
-                ownerOf[ids[i]] = to;
+                _setOwnerOf(ids[i], to);
                 amounts[i] = 1;
             }
         }
 
         emit TransferBatch(msg.sender, address(0), to, ids, amounts);
-        _doBatchReceiveCheck(address(0), to, ids, amounts, data);
+        _doBatchReceiveCheck(address(0), to, ids, amounts, "");
     }
 
     function _burn(uint256 id) internal virtual {
-        address owner = ownerOf[id];
+        address owner = ownerOf(id);
         _setOwnerOf(id, address(0));
 
         emit TransferSingle(msg.sender, owner, address(0), id, 1);
