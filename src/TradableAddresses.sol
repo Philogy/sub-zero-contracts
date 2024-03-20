@@ -9,25 +9,26 @@ import {IRenderer} from "./interfaces/IRenderer.sol";
 import {DeployProxy} from "./DeployProxy.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
 import {BytesLib} from "./utils/BytesLib.sol";
+import {SaltLib} from "./utils/SaltLib.sol";
 import {TransientBytes} from "./utils/TransientBytes.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource {
     using BytesLib for bytes;
+    using SaltLib for uint256;
 
     error NoSource();
     error InvalidSource();
     error ReenteringDeploy();
 
-    error InvalidSaltOwner();
     error NotOwnerOrOperator();
-    error AlreadyDeployed();
+    error AlreadyMinted();
     error NoRenderer();
 
     event RendererSet(address indexed renderer);
 
-    uint96 internal constant NOT_DEPLOYED = 0;
-    uint96 internal constant DEPLOYED = 1;
+    uint96 internal constant NOT_MINTED = 0;
+    uint96 internal constant ALREADY_MINTED = 1;
 
     address internal constant NO_DEPLOY_SOURCE = address(1);
     bytes32 internal immutable DEPLOY_PROXY_INITHASH = keccak256(type(DeployProxy).creationCode);
@@ -46,11 +47,10 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         emit RendererSet(newRenderer);
     }
 
-    function deploy(uint256 salt, address source, bytes calldata payload) public payable {
+    function deploy(uint256 salt, address source, bytes calldata payload) public payable returns (address deployed) {
         if (source == NO_DEPLOY_SOURCE) revert InvalidSource();
         if (_deploySource != NO_DEPLOY_SOURCE) revert ReenteringDeploy();
         if (!approvedOrOwner(msg.sender, salt)) revert NotOwnerOrOperator();
-        _setExtraData(salt, DEPLOYED);
         _burn(salt);
 
         if (source == address(0) || source == address(this)) store(payload);
@@ -59,22 +59,24 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         // Poor man's transient storage to ensure backwards compatibility with pre-Dencun
         // EVM chains.
         _deploySource = source;
-        new DeployProxy{salt: bytes32(salt), value: msg.value}();
+        deployed = address(new DeployProxy{salt: bytes32(salt), value: msg.value}());
         _deploySource = NO_DEPLOY_SOURCE;
     }
 
-    function mint(uint256 salt) public {
-        address saltOwner = address(uint160(salt >> 96));
-        if (saltOwner == address(0)) revert InvalidSaltOwner();
-        if (_getExtraData(salt) == DEPLOYED) revert AlreadyDeployed();
-        _mint(saltOwner, salt);
+    function mint(address to, uint256 salt) public {
+        if (msg.sender != address(this)) {
+            address owner = salt.owner();
+            if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotOwnerOrOperator();
+        }
+        if (alreadyMinted(salt)) revert AlreadyMinted();
+        _mintAndSetExtraDataUnchecked(to, salt, ALREADY_MINTED);
     }
 
-    function mintMany(uint256[] calldata newSalts) public {
+    function mintMany(address to, uint256[] calldata newSalts) public {
         uint256 saltsLength = newSalts.length;
         unchecked {
             for (uint256 i = 0; i < saltsLength; i++) {
-                mint(newSalts[i]);
+                mint(to, newSalts[i]);
             }
         }
     }
@@ -91,6 +93,10 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
 
     function getDeploySource() external view returns (address src) {
         src = _deploySource;
+    }
+
+    function alreadyMinted(uint256 id) public view returns (bool) {
+        return _getExtraData(id) == ALREADY_MINTED;
     }
 
     function approvedOrOwner(address operator, uint256 id) public view returns (bool) {
