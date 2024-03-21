@@ -42,26 +42,18 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         _initializeOwner(initialOwner);
     }
 
+    ////////////////////////////////////////////////////////////////
+    //                           ADMIN                            //
+    ////////////////////////////////////////////////////////////////
+
     function setRenderer(address newRenderer) external onlyOwner {
         renderer = newRenderer;
         emit RendererSet(newRenderer);
     }
 
-    function deploy(uint256 salt, address source, bytes calldata payload) public payable returns (address deployed) {
-        if (source == NO_DEPLOY_SOURCE) revert InvalidSource();
-        if (_deploySource != NO_DEPLOY_SOURCE) revert ReenteringDeploy();
-        if (!approvedOrOwner(msg.sender, salt)) revert NotOwnerOrOperator();
-        _burn(salt);
-
-        if (source == address(0) || source == address(this)) store(payload);
-        else IDeploySource(source).store(payload);
-
-        // Poor man's transient storage to ensure backwards compatibility with pre-Dencun
-        // EVM chains.
-        _deploySource = source;
-        deployed = address(new DeployProxy{salt: bytes32(salt), value: msg.value}());
-        _deploySource = NO_DEPLOY_SOURCE;
-    }
+    ////////////////////////////////////////////////////////////////
+    //                          MINTING                           //
+    ////////////////////////////////////////////////////////////////
 
     function mint(address to, uint256 salt) public {
         if (msg.sender != address(this)) {
@@ -81,6 +73,26 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         }
     }
 
+    ////////////////////////////////////////////////////////////////
+    //                   DEPLOYMENT & SOURCING                    //
+    ////////////////////////////////////////////////////////////////
+
+    function deploy(uint256 salt, address source, bytes calldata payload) public payable returns (address deployed) {
+        if (source == NO_DEPLOY_SOURCE) revert InvalidSource();
+        if (_deploySource != NO_DEPLOY_SOURCE) revert ReenteringDeploy();
+        if (!approvedOrOwner(msg.sender, salt)) revert NotOwnerOrOperator();
+        _burn(salt);
+
+        if (source == address(0) || source == address(this)) store(payload);
+        else IDeploySource(source).store(payload);
+
+        // Poor man's transient storage to ensure backwards compatibility with pre-Dencun
+        // EVM chains.
+        _deploySource = source;
+        deployed = address(new DeployProxy{salt: bytes32(salt), value: msg.value}());
+        _deploySource = NO_DEPLOY_SOURCE;
+    }
+
     function store(bytes calldata payload) public override {
         _payloadCache.store(payload);
     }
@@ -95,6 +107,10 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         src = _deploySource;
     }
 
+    ////////////////////////////////////////////////////////////////
+    //                          HELPERS                           //
+    ////////////////////////////////////////////////////////////////
+
     function alreadyMinted(uint256 id) public view returns (bool) {
         return _getExtraData(id) == ALREADY_MINTED;
     }
@@ -103,6 +119,10 @@ contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource
         address owner = ownerOf(id);
         return operator == owner || isApprovedForAll(owner, operator);
     }
+
+    ////////////////////////////////////////////////////////////////
+    //                          METADATA                          //
+    ////////////////////////////////////////////////////////////////
 
     function name() public pure override returns (string memory) {
         return "Tradable Vanity Addresses";
