@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Ownable} from "solady/src/auth/Ownable.sol";
-import {ERC721} from "solady/src/tokens/ERC721.sol";
+import {PermitERC721} from "./base/PermitERC721.sol";
 import {ITradableAddresses} from "./interfaces/ITradableAddresses.sol";
 import {IDeploySource} from "./interfaces/IDeploySource.sol";
 import {IRenderer} from "./interfaces/IRenderer.sol";
@@ -13,7 +13,7 @@ import {SaltLib} from "./utils/SaltLib.sol";
 import {TransientBytes} from "./utils/TransientBytes.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract TradableAddresses is Ownable, ERC721, ITradableAddresses, IDeploySource {
+contract TradableAddresses is Ownable, PermitERC721, ITradableAddresses, IDeploySource {
     using BytesLib for bytes;
     using SaltLib for uint256;
 
