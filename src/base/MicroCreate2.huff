@@ -1,0 +1,37 @@
+// balls-insert-start
+#define macro _CREATE(z0, create_succeeded) = takes(0) returns(2) {
+    // takes:                      []
+    0x20                        // [word]
+    <z0>                        // [word, z0]
+    calldataload                // [word, salt]
+    dup2                        // [word, salt, word]
+    calldatasize                // [word, salt, word, cdz]
+    sub                         // [word, salt, size]
+    dup1                        // [word, salt, size, size]
+    dup4                        // [word, salt, size, size, word]
+    <z0>                        // [word, salt, size, size, word, z0]
+    calldatacopy                // [word, salt, size]
+    <z0>                        // [word, salt, size, z0]
+    callvalue                   // [word, salt, size, z0, callvalue()]
+    create2                     // [word, addr]
+    dup1                        // [word, addr, addr]
+    <create_succeeded>          // [word, addr, addr, create_succeeded]
+    jumpi                       // [word, addr]
+    // returns:                    [word, addr]
+}
+// balls-insert-end
+
+#define macro _MAIN(z0) = takes(0) returns(0) {
+    _CREATE(<z0>, succeeded)    // [word, 0]
+        <z0>                    // [word, 0, 0]
+        revert                  // [word] -- end
+    succeeded:                  // [word, addr]
+        <z0>                    // [word, addr, 0]
+        mstore                  // [word]
+        <z0>                    // [word, 0]
+        return                  // [] -- end
+}
+
+#define macro MAIN() = takes(0) returns(0) {
+    _MAIN(returndatasize)
+}
