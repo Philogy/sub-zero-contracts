@@ -1,0 +1,22 @@
+fn _GET_SKIP_COUNT<z0>() -> (skip_count) {
+    first_cd_word = calldataload(z0)
+    skip_count = byte(z0, first_cd_word)
+}
+
+fn _CN(offset, zero) -> (addr) {
+    z0 = returndatasize()
+    addr = create(z0, offset, zero)
+}
+
+fn _SKIP_LT<bit, skip_to>(skip_count) -> (skip_count) {
+    is_set = and(skip_count, bit)
+    jumpi(skip_to, iszero(is_set))
+}
+
+const FINAL_TABLE
+
+fn _FINAL_SWITCH(skip_count) -> () {
+    index = and(skip_count, 0xf)
+    shift = shl(4, index)
+    jump(and(0xffff, shr(shift, FINAL_TABLE)))
+}
