@@ -1,11 +1,12 @@
 
-fn _CREATE<z0, create_succeeded>() -> (addr, word) {
+fn _MAIN<z0>() {
     salt = calldataload(z0)
     word = 0x20
     cdz = calldatasize()
     size = sub(cdz, word)
     calldatacopy(z0, word, size)
     addr = create2(callvalue(), z0, size, salt)
-    jumpi(create_succeeded, addr)
+    mstore(z0, addr)
+    return(z0, word)
 }
 

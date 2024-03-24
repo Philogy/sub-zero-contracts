@@ -32,8 +32,9 @@ contract MicroCreate2Test is Test {
     function test_failing() public {
         bytes32 salt = bytes32(0);
         (bool success, bytes memory ret) = micro.call(abi.encodePacked(salt, type(FailingDeploy).creationCode));
-        assertFalse(success);
-        assertEq(ret.length, 0);
+        assertTrue(success);
+        address addr = abi.decode(ret, (address));
+        assertEq(addr, address(0));
     }
 
     function test_deploySimple() public {
