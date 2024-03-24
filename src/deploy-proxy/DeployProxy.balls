@@ -1,0 +1,12 @@
+const NONCE_INCREASER
+
+
+fn _MAIN<z0>() {
+    calldatacopy(z0, z0, calldatasize())
+    one = 1
+    delegatecall(gas(), NONCE_INCREASER, z0, one, z0, z0)
+    initcode_size = sub(calldatasize(), one)
+    addr = create(callvalue(), 1, initcode_size)
+    mstore(z0, addr)
+    return(z0, 0x20)
+}

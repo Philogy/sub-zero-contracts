@@ -1,0 +1,35 @@
+#define macro MAIN() = takes(0) returns(0) {
+    _MAIN(returndatasize)
+}
+
+#define constant NONCE_INCREASER = 0xcccccccccccccccccccccccccccccccccccccccc
+
+// balls-insert-start
+#define macro _MAIN(z0) = takes(0) returns(0) {
+    // takes:                      []
+    0x1                         // [one]
+    <z0>                        // [one, z0]
+    calldatasize                // [one, z0, calldatasize()]
+    <z0>                        // [one, z0, calldatasize(), z0]
+    <z0>                        // [one, z0, calldatasize(), z0, z0]
+    calldatacopy                // [one, z0]
+    <z0>                        // [one, z0, z0]
+    dup3                        // [one, z0, z0, one]
+    <z0>                        // [one, z0, z0, one, z0]
+    [NONCE_INCREASER]           // [one, z0, z0, one, z0, NONCE_INCREASER]
+    gas                         // [one, z0, z0, one, z0, NONCE_INCREASER, gas()]
+    delegatecall                // [one, call_suc]
+    pop                         // [one]
+    calldatasize                // [one, calldatasize()]
+    sub                         // [initcode_size]
+    0x1                         // [initcode_size, 0x1]
+    callvalue                   // [initcode_size, 0x1, callvalue()]
+    create                      // [addr]
+    <z0>                        // [addr, z0]
+    mstore                      // []
+    0x20                        // [0x20]
+    <z0>                        // [0x20, z0]
+    return                      // []
+    // returns:                    []
+}
+// balls-insert-end
