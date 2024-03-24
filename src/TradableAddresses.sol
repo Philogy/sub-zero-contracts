@@ -4,12 +4,7 @@ pragma solidity ^0.8.24;
 // Base contracts & interfaces.
 import {Ownable} from "solady/src/auth/Ownable.sol";
 import {PermitERC721} from "./base/PermitERC721.sol";
-import {ITradableAddresses} from "./interfaces/ITradableAddresses.sol";
 import {IRenderer} from "./interfaces/IRenderer.sol";
-// Source & deployment.
-import {IDeploySource} from "./interfaces/IDeploySource.sol";
-import {TransientBytes} from "./utils/TransientBytes.sol";
-import {DeployProxy} from "./DeployProxy.sol";
 // Libraries.
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {SignatureCheckerLib} from "solady/src/utils/SignatureCheckerLib.sol";
@@ -18,7 +13,7 @@ import {BytesLib} from "./utils/BytesLib.sol";
 import {SaltLib} from "./utils/SaltLib.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract TradableAddresses is Ownable, PermitERC721, ITradableAddresses, IDeploySource {
+contract TradableAddresses is Ownable, PermitERC721 {
     using BytesLib for bytes;
     using SaltLib for uint256;
     using SafeTransferLib for address;
@@ -45,12 +40,6 @@ contract TradableAddresses is Ownable, PermitERC721, ITradableAddresses, IDeploy
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH =
         keccak256("MintAndSell(uint256 salt,uint256 amount,address beneficiary,uint256 nonce,uint256 deadline)");
-
-    address internal constant NO_DEPLOY_SOURCE = address(1);
-    bytes32 internal immutable DEPLOY_PROXY_INITHASH = keccak256(type(DeployProxy).creationCode);
-
-    address internal _deploySource = NO_DEPLOY_SOURCE;
-    TransientBytes internal _payloadCache;
 
     address public renderer;
     uint16 public buyFeeBps;
@@ -141,35 +130,7 @@ contract TradableAddresses is Ownable, PermitERC721, ITradableAddresses, IDeploy
     //                   DEPLOYMENT & SOURCING                    //
     ////////////////////////////////////////////////////////////////
 
-    function deploy(uint256 salt, address source, bytes calldata payload) public payable returns (address deployed) {
-        if (source == NO_DEPLOY_SOURCE) revert InvalidSource();
-        if (_deploySource != NO_DEPLOY_SOURCE) revert ReenteringDeploy();
-        if (!approvedOrOwner(msg.sender, salt)) revert NotOwnerOrOperator();
-        _burn(salt);
-
-        if (source == address(0) || source == address(this)) store(payload);
-        else IDeploySource(source).store(payload);
-
-        // Poor man's transient storage to ensure backwards compatibility with pre-Dencun
-        // EVM chains.
-        _deploySource = source;
-        deployed = address(new DeployProxy{salt: bytes32(salt), value: msg.value}());
-        _deploySource = NO_DEPLOY_SOURCE;
-    }
-
-    function store(bytes calldata payload) public override {
-        _payloadCache.store(payload);
-    }
-
-    function load() external override {
-        bytes memory payload = _payloadCache.load();
-        _payloadCache.reset();
-        payload.directReturn();
-    }
-
-    function getDeploySource() external view returns (address src) {
-        src = _deploySource;
-    }
+    function deploy(uint256 salt, address source, bytes calldata payload) public payable returns (address deployed) {}
 
     ////////////////////////////////////////////////////////////////
     //                          HELPERS                           //
@@ -199,8 +160,7 @@ contract TradableAddresses is Ownable, PermitERC721, ITradableAddresses, IDeploy
     function tokenURI(uint256 id) public view override returns (string memory) {
         address currentRenderer = renderer;
         if (currentRenderer == address(0)) revert NoRenderer();
-        address vanityAddr =
-            Create2Lib.predict({initCodeHash: DEPLOY_PROXY_INITHASH, salt: bytes32(id), deployer: address(this)});
+        address vanityAddr = Create2Lib.predict({initCodeHash: bytes32(0), salt: bytes32(id), deployer: address(this)});
         return IRenderer(currentRenderer).render(id, vanityAddr);
     }
 }
