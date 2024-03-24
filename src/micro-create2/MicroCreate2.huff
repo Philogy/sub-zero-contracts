@@ -1,3 +1,19 @@
+/// @dev Takes `salt: bytes32 || initcode` and deploys using create2.
+#define macro MAIN() = takes(0) returns(0) {
+    _MAIN(returndatasize)
+}
+
+#define macro _MAIN(z0) = takes(0) returns(0) {
+    _CREATE(<z0>, succeeded)    // [word, 0]
+        <z0>                    // [word, 0, 0]
+        revert                  // [word] -- end
+    succeeded:                  // [word, addr]
+        <z0>                    // [word, addr, 0]
+        mstore                  // [word]
+        <z0>                    // [word, 0]
+        return                  // [] -- end
+}
+
 // balls-insert-start
 #define macro _CREATE(z0, create_succeeded) = takes(0) returns(2) {
     // takes:                      []
@@ -20,18 +36,3 @@
     // returns:                    [word, addr]
 }
 // balls-insert-end
-
-#define macro _MAIN(z0) = takes(0) returns(0) {
-    _CREATE(<z0>, succeeded)    // [word, 0]
-        <z0>                    // [word, 0, 0]
-        revert                  // [word] -- end
-    succeeded:                  // [word, addr]
-        <z0>                    // [word, addr, 0]
-        mstore                  // [word]
-        <z0>                    // [word, 0]
-        return                  // [] -- end
-}
-
-#define macro MAIN() = takes(0) returns(0) {
-    _MAIN(returndatasize)
-}

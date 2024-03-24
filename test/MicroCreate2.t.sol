@@ -61,7 +61,7 @@ contract MicroCreate2Test is Test {
         string[] memory args = new string[](4);
         args[0] = "huffy";
         args[1] = "-b";
-        args[2] = "src/base/MicroCreate2.huff";
+        args[2] = "src/micro-create2/MicroCreate2.huff";
         args[3] = "--avoid-push0";
         return vm.ffi(args);
     }
