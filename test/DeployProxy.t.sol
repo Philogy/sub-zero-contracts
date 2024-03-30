@@ -6,15 +6,15 @@ import {HuffTest} from "./base/HuffTest.sol";
 import {MockDeployProxy} from "./mocks/MockDeployProxy.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
+import {console2 as console} from "forge-std/console2.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract DeployProxyTest is Test, HuffTest {
     using LibString for *;
 
-    address increaser = deployRaw(_huffInitcode("src/deploy-proxy/NonceIncreaser.huff"));
-
     function test_increases() public {
-        address creaser = increaser;
+        bytes memory increaserCode = _huffInitcode("src/deploy-proxy/NonceIncreaser.huff");
+        address creaser = deployRaw(increaserCode);
         string[] memory consts = new string[](1);
         consts[0] = string.concat("NONCE_INCREASER=", creaser.toHexString());
         bytes memory deployerInitcode = _huffInitcode("src/deploy-proxy/DeployProxy.huff", consts);
@@ -25,7 +25,6 @@ contract DeployProxyTest is Test, HuffTest {
             assertTrue(success);
             address deployed = abi.decode(ret, (address));
             assertValidNonce(deployed, address(deployer), i + 1);
-            assertEq(deployed, LibRLP.computeAddress(address(deployer), i + 1));
         }
     }
 

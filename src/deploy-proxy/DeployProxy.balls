@@ -1,10 +1,12 @@
 const NONCE_INCREASER
 
-
-fn _MAIN<z0>() {
+fn _INC_NONCE<z0>() -> (suc, one) {
     calldatacopy(z0, z0, calldatasize())
     one = 1
-    delegatecall(gas(), NONCE_INCREASER, z0, one, z0, z0)
+    suc = delegatecall(gas(), NONCE_INCREASER, z0, one, z0, z0)
+}
+
+fn _CREATE<z0>(one) {
     initcode_size = sub(calldatasize(), one)
     addr = create(callvalue(), 1, initcode_size)
     mstore(z0, addr)

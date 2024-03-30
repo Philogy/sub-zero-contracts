@@ -5,21 +5,8 @@
 #define constant NONCE_INCREASER = 0xcccccccccccccccccccccccccccccccccccccccc
 
 // balls-insert-start
-#define macro _MAIN(z0) = takes(0) returns(0) {
-    // takes:                      []
-    0x1                         // [one]
-    <z0>                        // [one, z0]
-    calldatasize                // [one, z0, calldatasize()]
-    <z0>                        // [one, z0, calldatasize(), z0]
-    <z0>                        // [one, z0, calldatasize(), z0, z0]
-    calldatacopy                // [one, z0]
-    <z0>                        // [one, z0, z0]
-    dup3                        // [one, z0, z0, one]
-    <z0>                        // [one, z0, z0, one, z0]
-    [NONCE_INCREASER]           // [one, z0, z0, one, z0, NONCE_INCREASER]
-    gas                         // [one, z0, z0, one, z0, NONCE_INCREASER, gas()]
-    delegatecall                // [one, call_suc]
-    pop                         // [one]
+#define macro _CREATE(z0) = takes(1) returns(0) {
+    // takes:                      [one]
     calldatasize                // [one, calldatasize()]
     sub                         // [initcode_size]
     0x1                         // [initcode_size, 0x1]
@@ -32,4 +19,32 @@
     return                      // []
     // returns:                    []
 }
+
+#define macro _INC_NONCE(z0) = takes(0) returns(2) {
+    // takes:                      []
+    0x1                         // [one]
+    <z0>                        // [one, z0]
+    <z0>                        // [one, z0, z0]
+    calldatasize                // [one, z0, z0, calldatasize()]
+    <z0>                        // [one, z0, z0, calldatasize(), z0]
+    <z0>                        // [one, z0, z0, calldatasize(), z0, z0]
+    calldatacopy                // [one, z0, z0]
+    dup3                        // [one, z0, z0, one]
+    <z0>                        // [one, z0, z0, one, z0]
+    [NONCE_INCREASER]           // [one, z0, z0, one, z0, NONCE_INCREASER]
+    gas                         // [one, z0, z0, one, z0, NONCE_INCREASER, gas()]
+    delegatecall                // [one, suc]
+    // returns:                    [one, suc]
+}
 // balls-insert-end
+
+#define macro _MAIN(z0) = takes(0) returns(0) {
+    // takes:                      []
+    _INC_NONCE(<z0>)            // [1, suc]
+    inc_successful jumpi        // [1]
+        <z0> revert             // [] -- end
+    inc_successful:             // [1]
+        // Fine to directly return result, in failure case will be `address(0)` but that can be
+        // checked externally.
+        _CREATE(<z0>)           // [] -- end
+}
