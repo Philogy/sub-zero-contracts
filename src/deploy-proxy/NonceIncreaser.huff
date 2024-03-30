@@ -61,7 +61,7 @@ Table manually composed by:
 // balls-insert-end
 
 /**
- * @dev The core macro that acts as a variable length "unrolled" loop. Nonce are executed in powers
+ * @dev The core macro that acts as a variable length "unrolled" loop. Nonces are incremented in powers
  * of two to minimize the overhead related to the branching required for a loop.
  *
  * To save gas the output address of the `CREATE` opcode is used as the memory offset for the next
