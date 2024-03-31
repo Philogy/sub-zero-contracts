@@ -9,25 +9,24 @@ import {IRenderer} from "./interfaces/IRenderer.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
 import {BytesLib} from "./utils/BytesLib.sol";
-import {SaltLib} from "./utils/SaltLib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract TradableAddresses is Ownable, PermitERC721 {
     using BytesLib for bytes;
-    using SaltLib for uint256;
     using SafeTransferLib for address;
 
     error NotAuhtorizedBuyer();
     error InvalidFee();
 
-    error NoSource();
-    error InvalidSource();
-    error ReenteringDeploy();
-
-    error NotOwnerOrOperator();
+    error AlreadyCommited();
+    error RevealTooSoon();
+    error NotFreeSalt();
     error AlreadyMinted();
+    error NotSaltOwnerOrApproved();
+
     error NoRenderer();
+    error DeploymentFailed();
 
     event RendererSet(address indexed renderer);
     event FeeSet(uint16 fee);
@@ -35,20 +34,25 @@ contract TradableAddresses is Ownable, PermitERC721 {
     uint96 internal constant MINTED_BIT = 0x100;
     uint256 internal constant BPS = 10000;
 
+    /// @dev Want to provide chain censoring / reorg attacks to frontrun the claim & reveal.
+    uint256 internal constant COMMIT_REVEAL_DELAY = 10 minutes;
+
     // TODO: Mine and insert nonce incrementer.
     bytes internal DEPLOY_PROXY_INITCODE;
     bytes32 internal immutable DEPLOY_PROXY_INITHASH;
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
-        "MintAndSell(uint256 salt,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
+        "MintAndSell(bytes32 salt,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
 
     address public renderer;
     uint16 public buyFeeBps;
 
+    mapping(bytes32 hash => uint256 time) public commitedAt;
+
     constructor(address initialOwner, address nonceIncreaser) {
         DEPLOY_PROXY_INITCODE = abi.encodePacked(
-            hex"602e8060095f395ff360013d363d3d373d823d73", nonceIncreaser, hex"5af4503603600134f03d5260203df3"
+            hex"602e8060093d393df360013d8136033d3d843d363d3d3773", nonceIncreaser, hex"5af460051b9234f08152f3"
         );
         DEPLOY_PROXY_INITHASH = keccak256(DEPLOY_PROXY_INITCODE);
         _initializeOwner(initialOwner);
@@ -70,19 +74,17 @@ contract TradableAddresses is Ownable, PermitERC721 {
     }
 
     function withdraw(address to, uint256 amount) external onlyOwner {
-        assembly ("memory-safe") {
-            amount := add(amount, mul(selfbalance(), iszero(amount)))
-        }
+        if (amount > type(uint248).max) amount = address(this).balance;
         to.safeTransferETH(amount);
     }
 
     ////////////////////////////////////////////////////////////////
-    //                      GASLESS MINTING                       //
+    //                          MINTING                           //
     ////////////////////////////////////////////////////////////////
 
-    function mintAndBuy(
+    function mintAndBuyWithSig(
         address to,
-        uint256 salt,
+        bytes32 salt,
         uint8 saltNonce,
         address beneficiary,
         uint256 sellerAmount,
@@ -92,7 +94,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
         bytes calldata signature
     ) external payable {
         _checkDeadline(deadline);
-        address owner = salt.owner();
+        address owner = _saltOwner(salt);
         _checkAndUseNonce(owner, nonce);
         _checkBuyer(buyer);
         bytes32 hash = _hashTypedData(
@@ -100,10 +102,12 @@ contract TradableAddresses is Ownable, PermitERC721 {
                 abi.encode(MINT_AND_SELL_TYPEHASH, salt, saltNonce, sellerAmount, beneficiary, buyer, nonce, deadline)
             )
         );
+        // Deals with `address(0)` for us.
         _checkSignature(owner, hash, signature);
 
         _mint(to, salt, saltNonce);
 
+        // Calculate buy cost such that retained fee is `buyFeeBps / BPS` of the cost.
         uint256 buyCost = sellerAmount * BPS / (BPS - buyFeeBps);
         // Checked subtraction will underflow if insufficient funds were sent.
         uint256 amountLeft = msg.value - buyCost;
@@ -111,50 +115,51 @@ contract TradableAddresses is Ownable, PermitERC721 {
         if (amountLeft > 0) msg.sender.safeTransferETH(amountLeft);
     }
 
-    ////////////////////////////////////////////////////////////////
-    //                          MINTING                           //
-    ////////////////////////////////////////////////////////////////
+    function commit(bytes32 hash) external {
+        if (commitedAt[hash] != 0) revert AlreadyCommited();
+        commitedAt[hash] = block.timestamp;
+    }
 
-    function mint(address to, uint256 salt, uint8 nonce) public {
-        address owner = salt.owner();
-        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotOwnerOrOperator();
+    function mintRevealed(address to, bytes32 salt, uint8 nonce) external {
+        bytes32 hash = keccak256(abi.encodePacked(to, salt, nonce));
+        if (commitedAt[hash] + COMMIT_REVEAL_DELAY > block.timestamp) revert RevealTooSoon();
+        if (_saltOwner(salt) != address(0)) revert NotFreeSalt();
         _mint(to, salt, nonce);
     }
 
-    struct NewSalt {
-        uint256 salt;
-        uint8 nonce;
+    function mint(address to, bytes32 salt, uint8 nonce) external {
+        address owner = _saltOwner(salt);
+        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotSaltOwnerOrApproved();
+        _mint(to, salt, nonce);
     }
 
-    function mintMany(address to, NewSalt[] calldata salts) public {
-        uint256 totalSalts = salts.length;
-        unchecked {
-            for (uint256 i = 0; i < totalSalts; i++) {
-                NewSalt calldata newSalt = salts[i];
-                mint(to, newSalt.salt, newSalt.nonce);
-            }
-        }
-    }
-
-    function _mint(address to, uint256 salt, uint8 nonce) internal {
-        (bool minted,) = getTokenData(salt);
+    function _mint(address to, bytes32 salt, uint8 nonce) internal {
+        uint256 id = uint256(salt);
+        (bool minted,) = getTokenData(id);
         if (minted) revert AlreadyMinted();
-        _mintAndSetExtraDataUnchecked(to, salt, _packMinted(nonce));
+        _mintAndSetExtraDataUnchecked(to, id, _packMinted(nonce));
     }
 
     ////////////////////////////////////////////////////////////////
     //                         DEPLOYMENT                         //
     ////////////////////////////////////////////////////////////////
 
-    function deploy(uint256 id, bytes calldata initcode) public payable returns (address deployed) {
+    function deploy(uint256 id, bytes calldata initcode) external payable returns (address deployed) {
         if (!approvedOrOwner(msg.sender, id)) revert NotOwnerNorApproved();
         (, uint8 nonce) = getTokenData(id);
         bytes memory deployProxyInitcode = DEPLOY_PROXY_INITCODE;
         assembly ("memory-safe") {
-            let deployProxy := create2(callvalue(), add(deployProxyInitcode, 0x20), mload(deployProxyInitcode), id)
+            let deployProxy := create2(0, add(deployProxyInitcode, 0x20), mload(deployProxyInitcode), id)
             let m := mload(0x40)
             mstore8(m, nonce)
             calldatacopy(add(m, 1), initcode.offset, initcode.length)
+            let success := call(gas(), deployProxy, callvalue(), m, add(initcode.length, 1), 0x00, 0x20)
+            deployed := mload(0x00)
+            // `and(iszero(x), y: 0/1)` is equivalent to `lt(x, y)`.
+            if iszero(and(success, lt(iszero(deployed), eq(returndatasize(), 0x20)))) {
+                mstore(0x00, 0x30116425 /* DeploymentFailed() */ )
+                revert(0x1c, 0x04)
+            }
         }
     }
 
@@ -181,7 +186,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
 
     function computeAddress(bytes32 salt, uint8 nonce) public view returns (address vanity) {
         address deployProxy = Create2Lib.predict(DEPLOY_PROXY_INITHASH, salt, address(this));
-        vanity = LibRLP.computeAddress(deployProxy, nonce);
+        vanity = LibRLP.computeAddress(deployProxy, nonce + 1);
     }
 
     function _packMinted(uint8 nonce) internal pure returns (uint96) {
@@ -213,5 +218,9 @@ contract TradableAddresses is Ownable, PermitERC721 {
             authorized := or(iszero(buyer), eq(buyer, caller()))
         }
         if (!authorized) revert NotAuhtorizedBuyer();
+    }
+
+    function _saltOwner(bytes32 salt) internal pure returns (address) {
+        return address(bytes20(salt));
     }
 }

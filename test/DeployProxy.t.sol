@@ -22,6 +22,7 @@ contract DeployProxyTest is Test, HuffTest {
             address deployer = deployRaw(deployerInitcode);
             (bool success, bytes memory ret) = deployer.call(bytes.concat(bytes1(uint8(i))));
             assertTrue(success);
+            assertEq(ret.length, 0x20, "Unexpected returndata length");
             address deployed = abi.decode(ret, (address));
             assertValidNonce(deployed, address(deployer), i + 1);
         }
