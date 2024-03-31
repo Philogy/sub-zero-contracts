@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import {Test} from "forge-std/Test.sol";
 import {HuffTest} from "./base/HuffTest.sol";
-import {MockDeployProxy} from "./mocks/MockDeployProxy.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
 import {console2 as console} from "forge-std/console2.sol";
