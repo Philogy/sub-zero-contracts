@@ -14,14 +14,14 @@ abstract contract PermitERC721 is ERC721, EIP712 {
     error PastDeadline();
     error InvalidSignature();
 
-    /// @dev Copied from Solady as it's private.
+    /// @dev Copied slot seed constant from Solady.
     uint256 private constant _ERC721_MASTER_SLOT_SEED_MASKED = 0x0a5a2e7a00000000;
     /// @dev `keccak256(bytes("ApprovalForAll(address,address,bool)"))`.
     uint256 private constant _APPROVAL_FOR_ALL_EVENT_SIGNATURE =
         0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31;
 
     bytes32 internal immutable PERMIT_FOR_ALL_TYPEHASH =
-        keccak256("PermitForAll(address owner,address operator,uint256 nonce,uint256 deadline)");
+        keccak256("PermitForAll(address operator,uint256 nonce,uint256 deadline)");
 
     mapping(address => LibBitmap.Bitmap) internal _nonces;
 
@@ -29,9 +29,9 @@ abstract contract PermitERC721 is ERC721, EIP712 {
         external
     {
         _checkDeadline(deadline);
-        _checkAndUseNonce(owner, nonce);
-        bytes32 hash = _hashTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, owner, operator, nonce, deadline)));
+        bytes32 hash = _hashTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, operator, nonce, deadline)));
         _checkSignature(owner, hash, signature);
+        _checkAndUseNonce(owner, nonce);
         _setIsApprovedForAll(owner, operator, true);
     }
 
@@ -64,18 +64,20 @@ abstract contract PermitERC721 is ERC721, EIP712 {
     }
 
     /// @dev Reference: Solady's `ERC721.setApprovalForAll`.
-    function _setIsApprovedForAll(address owner, address operator, bool approved) internal {
-        // Set `isApprovedForAll(owner, operator) == approved`.
+    function _setIsApprovedForAll(address owner, address operator, bool isApproved) internal {
+        // Set `isApprovedForAll(owner, operator) == isApproved`.
         assembly ("memory-safe") {
+            // Convert to 0 or 1.
+            isApproved := iszero(iszero(isApproved))
             // Update the `isApproved` for (`msg.sender`, `operator`).
             mstore(0x1c, operator)
             mstore(0x08, _ERC721_MASTER_SLOT_SEED_MASKED)
             mstore(0x00, owner)
-            sstore(keccak256(0x0c, 0x30), iszero(iszero(approved)))
+            sstore(keccak256(0x0c, 0x30), isApproved)
             // Emit the {ApprovalForAll} event.
-            mstore(0x00, true)
+            mstore(0x00, isApproved)
             // forgefmt: disable-next-item
-            log3(0x00, 0x20, _APPROVAL_FOR_ALL_EVENT_SIGNATURE, caller(), shr(96, shl(96, operator)))
+            log3(0x00, 0x20, _APPROVAL_FOR_ALL_EVENT_SIGNATURE, shr(96, shl(96, owner)), shr(96, shl(96, operator)))
         }
     }
 }
