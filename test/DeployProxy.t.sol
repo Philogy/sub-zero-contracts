@@ -12,7 +12,7 @@ contract DeployProxyTest is Test, HuffTest {
     using LibString for *;
 
     function setUp() public {
-        setupBase();
+        setupBase_ffi();
     }
 
     function test_increases() public {

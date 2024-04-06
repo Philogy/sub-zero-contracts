@@ -8,7 +8,7 @@ contract HuffTest is Test {
     address internal constant MICRO_CREATE2 = 0x6D9FB3C412a269Df566a5c92b85a8dc334F0A797;
     address internal constant NONCE_INCREASER = 0x00000000000001E4A82b33373DE1334E7d8F4879;
 
-    function setupBase() internal {
+    function setupBase_ffi() internal {
         vm.etch(MICRO_CREATE2, _huff("src/micro-create2/MicroCreate2.huff", new string[](0), false));
         vm.etch(NONCE_INCREASER, _huff("src/deploy-proxy/NonceIncreaser.huff", new string[](0), false));
     }

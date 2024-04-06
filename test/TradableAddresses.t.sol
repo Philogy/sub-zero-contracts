@@ -19,22 +19,22 @@ contract TradableAddressesTest is Test, HuffTest {
     address immutable owner = makeAddr("owner");
 
     function setUp() public {
+        setupBase_ffi();
         trader = new TradableAddresses(owner);
     }
 
     function test_mintAndDeploy() public {
         address user = makeAddr("user");
-        bytes32 salt = bytes32((uint256(uint160(user)) << 96) | 0x983974);
-        uint256 id = uint256(salt);
+        uint256 id = getId(user, 0x983974);
         uint8 nonce = 34;
         vm.prank(user);
-        trader.mint(user, salt, nonce);
+        trader.mint(user, bytes32(id), nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
         MockSimple simp =
             MockSimple(trader.deploy(id, abi.encodePacked(type(MockSimple).creationCode, abi.encode(user))));
-        assertEq(address(simp), trader.computeAddress(salt, nonce));
+        assertEq(address(simp), trader.computeAddress(bytes32(id), nonce));
         assertEq(address(simp), trader.addressOf(id));
         assertEq(address(simp).code, type(MockSimple).runtimeCode);
         assertEq(simp.balanceOf(user), 10e18);
@@ -43,11 +43,10 @@ contract TradableAddressesTest is Test, HuffTest {
 
     function test_bubblesDeployRevert() public {
         address user = makeAddr("user");
-        bytes32 salt = bytes32((uint256(uint160(user)) << 96) | 0xab19c31);
-        uint256 id = uint256(salt);
+        uint256 id = getId(user, 0xab19c31);
         uint8 nonce = 21;
         vm.prank(user);
-        trader.mint(user, salt, nonce);
+        trader.mint(user, bytes32(id), nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
@@ -57,11 +56,10 @@ contract TradableAddressesTest is Test, HuffTest {
 
     function test_bubblesIncreaseRevert() public {
         address user = makeAddr("user");
-        bytes32 salt = bytes32((uint256(uint160(user)) << 96) | 0xab19c31);
-        uint256 id = uint256(salt);
+        uint256 id = getId(user, 0xab19c31);
         uint8 nonce = 255;
         vm.prank(user);
-        trader.mint(user, salt, nonce);
+        trader.mint(user, bytes32(id), nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
@@ -69,5 +67,11 @@ contract TradableAddressesTest is Test, HuffTest {
         // Ensure out-of-gas within increaser but sufficient remaining gas to test whether
         // standalone increase revert will actually get bubbled up.
         trader.deploy{gas: 250 * 32000}(id, type(Empty).creationCode);
+    }
+
+    // function test_nonOwnerCannotMint
+
+    function getId(address miner, uint96 extra) internal pure returns (uint256) {
+        return (uint256(uint160(miner)) << 96) | uint256(extra);
     }
 }

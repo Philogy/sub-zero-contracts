@@ -10,7 +10,7 @@ import {console2 as console} from "forge-std/console2.sol";
 /// @author philogy <https://github.com/philogy>
 contract MicroCreate2Test is Test, HuffTest {
     function setUp() public {
-        setupBase();
+        setupBase_ffi();
     }
 
     function test_inception() public {
