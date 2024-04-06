@@ -15,15 +15,13 @@ contract TradableAddresses is Ownable, PermitERC721 {
     using SafeTransferLib for address;
 
     error NotAuhtorizedBuyer();
+    error InsufficientValue();
     error InvalidFee();
 
-    error AlreadyCommited();
-    error RevealTooSoon();
-    error NotFreeSalt();
     error AlreadyMinted();
-    error NotSaltOwnerOrApproved();
 
     error NoRenderer();
+    error RendererLockedIn();
     error DeploymentFailed();
 
     event RendererSet(address indexed renderer);
@@ -32,8 +30,6 @@ contract TradableAddresses is Ownable, PermitERC721 {
     uint96 internal constant MINTED_BIT = 0x100;
     uint256 internal constant BPS = 10000;
 
-    /// @dev Want to provide chain censoring / reorg attacks to frontrun the claim & reveal.
-    uint256 internal constant COMMIT_REVEAL_DELAY = 10 minutes;
     uint256 internal constant DEPLOY_PROXY_INITCODE_0_32 =
         0x60288060093d393df36001600581360334348434363434376d01e4a82b33373d;
     uint256 internal constant DEPLOY_PROXY_INITCODE_32_17 = 0xe1334e7d8f48795af49247f034521b34f3;
@@ -47,9 +43,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     );
 
     address public renderer;
-    uint16 public buyFeeBps;
-
-    mapping(bytes32 hash => uint256 time) public commitedAt;
+    uint16 public feeBps;
 
     constructor(address initialOwner) {
         _initializeOwner(initialOwner);
@@ -59,17 +53,37 @@ contract TradableAddresses is Ownable, PermitERC721 {
     //                           ADMIN                            //
     ////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev Set the renderer contract that creates the graphic & metadata representation returned
+     * from the `tokenURI(...)` method.
+     * @param newRenderer Address of the new renderer contract. If it has 6 leading zero bytes it
+     * will be considered immutable.
+     */
     function setRenderer(address newRenderer) external onlyOwner {
+        address currentRenderer = renderer;
+        // If the `currentRenderer` is set (not the zero address) and has at least 6 leading zero
+        // bytes (numerically smaller than 2^(160 - 8 * 6)) it's considered immutable.
+        if (currentRenderer != address(0) && uint160(currentRenderer) < 1 << 112) revert RendererLockedIn();
+
         renderer = newRenderer;
         emit RendererSet(newRenderer);
     }
 
+    /**
+     * @dev Change the contract's buy fee.
+     * @param newFee The new fee in basis points.
+     */
     function setFee(uint16 newFee) external onlyOwner {
         if (newFee >= BPS) revert InvalidFee();
-        buyFeeBps = newFee;
-        emit FeeSet(newFee);
+        emit FeeSet(feeBps = newFee);
     }
 
+    /**
+     * @dev Withdraws leftover held ETH from the contract.
+     * @param to The address to receive the ETH.
+     * @param amount The amount of ETH to withdraw. If greater than or equal to 2^248 will withdraw
+     * all available ETH.
+     */
     function withdraw(address to, uint256 amount) external onlyOwner {
         if (amount > type(uint248).max) amount = address(this).balance;
         to.safeTransferETH(amount);
@@ -79,12 +93,33 @@ contract TradableAddresses is Ownable, PermitERC721 {
     //                          MINTING                           //
     ////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev Buys an unminted tradable address from the owner that mined it. The price is denominated
+     * in ETH. On top of the specified `sellerPrice` the caller has to supply value such that it
+     * satisfies the contract's royalty or "buy fee" (calculated via the `calculateBuyCost` method).
+     * Any value provided above the calculated buy cost will be returned, note that a sudden fee
+     * change may capture any delta. Do not specify a value higher than what you're willing to pay.
+     * @notice Mint & buy a vanity address from the actual salt owner using an off-chain approval.
+     * @param to The address that'll receive the token.
+     * @param salt The token's salt.
+     * @param saltNonce The create3 nonce *increase* to tie to the token. The deploy proxy's final
+     * deployment nonce will be qual to `saltNonce + 1`. This is because contract nonces start at 1.
+     * @param beneficiary The recipient of the ETH sale proceeds. Note that this can be different
+     * than the salt's owner.
+     * @param sellerPrice The sale proceeds to be sent to the `beneficiary`.
+     * @param buyer The address that's authorized to complete the purchase, `address(0)` if it's
+     * meant to be open to anyone.
+     * @param nonce The salt owner's nonce.
+     * @param deadline Timestamp until which the sale intent is valid.
+     * @param signature ECDSA (r, s, v), ERC2098 compressed ECDSA (r, vs), or ERC-1271 signature
+     * from the salt owner for the `MintAndSell` struct.
+     */
     function mintAndBuyWithSig(
         address to,
         bytes32 salt,
         uint8 saltNonce,
         address beneficiary,
-        uint256 sellerAmount,
+        uint256 sellerPrice,
         address buyer,
         uint256 nonce,
         uint256 deadline,
@@ -93,10 +128,14 @@ contract TradableAddresses is Ownable, PermitERC721 {
         _checkDeadline(deadline);
         address owner = _saltOwner(salt);
         _checkAndUseNonce(owner, nonce);
+
+        uint256 buyCost = calculateBuyCost(sellerPrice);
+        if (buyCost > msg.value) revert InsufficientValue();
+
         _checkBuyer(buyer);
         bytes32 hash = _hashTypedData(
             keccak256(
-                abi.encode(MINT_AND_SELL_TYPEHASH, salt, saltNonce, sellerAmount, beneficiary, buyer, nonce, deadline)
+                abi.encode(MINT_AND_SELL_TYPEHASH, salt, saltNonce, sellerPrice, beneficiary, buyer, nonce, deadline)
             )
         );
         // Deals with `address(0)` for us.
@@ -104,29 +143,30 @@ contract TradableAddresses is Ownable, PermitERC721 {
 
         _mint(to, salt, saltNonce);
 
-        // Calculate buy cost such that retained fee is `buyFeeBps / BPS` of the cost.
-        uint256 buyCost = sellerAmount * BPS / (BPS - buyFeeBps);
-        // Checked subtraction will underflow if insufficient funds were sent.
-        uint256 amountLeft = msg.value - buyCost;
-        beneficiary.safeTransferETH(sellerAmount);
-        if (amountLeft > 0) msg.sender.safeTransferETH(amountLeft);
+        unchecked {
+            // Guaranteed not to overflow due to above check.
+            uint256 amountLeft = msg.value - buyCost;
+            beneficiary.safeTransferETH(sellerPrice);
+            if (amountLeft > 0) msg.sender.safeTransferETH(amountLeft);
+        }
     }
 
-    function commit(bytes32 hash) external {
-        if (commitedAt[hash] != 0) revert AlreadyCommited();
-        commitedAt[hash] = block.timestamp;
+    function calculateBuyCost(uint256 sellerPrice) public view returns (uint256) {
+        return sellerPrice * BPS / (BPS - feeBps);
     }
 
-    function mintRevealed(address to, bytes32 salt, uint8 nonce) external {
-        bytes32 hash = keccak256(abi.encodePacked(to, salt, nonce));
-        if (commitedAt[hash] + COMMIT_REVEAL_DELAY > block.timestamp) revert RevealTooSoon();
-        if (_saltOwner(salt) != address(0)) revert NotFreeSalt();
-        _mint(to, salt, nonce);
-    }
-
+    /**
+     * @dev Mints a salt you own or on behalf of the owner if they've approved you.
+     * @notice Mint a vanity address token.
+     * @param to Address to receive the newly minted token.
+     * @param salt The CREATE3 salt for the vanity address to be used. Will also be the token ID
+     * for the resulting ERC-721 NFT.
+     * @param nonce The CREATE3 nonce increase for the vanity address to be deployed. The actual
+     * deployment nonce will be `nonce + 1` because contract nonces start at 1.
+     */
     function mint(address to, bytes32 salt, uint8 nonce) external {
         address owner = _saltOwner(salt);
-        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotSaltOwnerOrApproved();
+        if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotOwnerNorApproved();
         _mint(to, salt, nonce);
     }
 
@@ -134,7 +174,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
         uint256 id = uint256(salt);
         (bool minted,) = getTokenData(id);
         if (minted) revert AlreadyMinted();
-        _mintAndSetExtraDataUnchecked(to, id, _packMinted(nonce));
+        _mintAndSetExtraDataUnchecked(to, id, uint96(nonce) | MINTED_BIT);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -184,8 +224,18 @@ contract TradableAddresses is Ownable, PermitERC721 {
         vanity = LibRLP.computeAddress(deployProxy, nonce + 1);
     }
 
-    function _packMinted(uint8 nonce) internal pure returns (uint96) {
-        return uint96(nonce) | MINTED_BIT;
+    /// @dev Checks that the caller is either equal to `buyer` or `buyer` is the zero address.
+    function _checkBuyer(address buyer) internal view {
+        assembly ("memory-safe") {
+            if iszero(or(iszero(buyer), eq(buyer, caller()))) {
+                mstore(0x00, 0x6067def5 /* NotAuhtorizedBuyer()*/ )
+                revert(0x1c, 0x04)
+            }
+        }
+    }
+
+    function _saltOwner(bytes32 salt) internal pure returns (address) {
+        return address(bytes20(salt));
     }
 
     ////////////////////////////////////////////////////////////////
@@ -193,7 +243,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     ////////////////////////////////////////////////////////////////
 
     function name() public pure override returns (string memory) {
-        return "Tradable Vanity Addresses";
+        return "Tokenized CREATE3 Vanity Addresses";
     }
 
     function symbol() public pure override returns (string memory) {
@@ -203,19 +253,9 @@ contract TradableAddresses is Ownable, PermitERC721 {
     function tokenURI(uint256 id) public view override returns (string memory) {
         address currentRenderer = renderer;
         if (currentRenderer == address(0)) revert NoRenderer();
-        address vanityAddr = addressOf(id);
-        return IRenderer(currentRenderer).render(id, vanityAddr);
-    }
-
-    function _checkBuyer(address buyer) internal view {
-        bool authorized;
-        assembly ("memory-safe") {
-            authorized := or(iszero(buyer), eq(buyer, caller()))
-        }
-        if (!authorized) revert NotAuhtorizedBuyer();
-    }
-
-    function _saltOwner(bytes32 salt) internal pure returns (address) {
-        return address(bytes20(salt));
+        (bool minted, uint8 nonce) = getTokenData(id);
+        if (!minted) revert TokenDoesNotExist();
+        address vanityAddr = computeAddress(bytes32(id), nonce);
+        return IRenderer(currentRenderer).render(id, vanityAddr, nonce);
     }
 }
