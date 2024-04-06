@@ -11,12 +11,12 @@ import {console2 as console} from "forge-std/console2.sol";
 contract DeployProxyTest is Test, HuffTest {
     using LibString for *;
 
+    function setUp() public {
+        setupBase();
+    }
+
     function test_increases() public {
-        bytes memory increaserCode = _huffInitcode("src/deploy-proxy/NonceIncreaser.huff");
-        address creaser = deployRaw(increaserCode);
-        string[] memory consts = new string[](1);
-        consts[0] = string.concat("NONCE_INCREASER=", creaser.toHexString());
-        bytes memory deployerInitcode = _huffInitcode("src/deploy-proxy/DeployProxy.huff", consts);
+        bytes memory deployerInitcode = _huffInitcode("src/deploy-proxy/DeployProxy.huff");
 
         for (uint256 i = 0; i < 256; i++) {
             address deployer = deployRaw(deployerInitcode);

@@ -17,7 +17,6 @@ contract TradableAddressesTest is Test, HuffTest {
     TradableAddresses trader;
 
     address immutable owner = makeAddr("owner");
-    address immutable increaser = deployRaw(_huffInitcode("src/deploy-proxy/NonceIncreaser.huff"));
 
     function setUp() public {
         trader = new TradableAddresses(owner, increaser);

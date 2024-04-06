@@ -2,7 +2,7 @@
     _MAIN(returndatasize)
 }
 
-#define constant NONCE_INCREASER = 0xcccccccccccccccccccccccccccccccccccccccc
+#define constant NONCE_INCREASER = 0x00000000000001e4a82b33373de1334e7d8f4879
 
 // balls-insert-start
 #define macro _MAIN_TEMPLATE(z0) = takes(0) returns(0) {
