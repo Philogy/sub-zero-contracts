@@ -8,12 +8,10 @@ import {IRenderer} from "./interfaces/IRenderer.sol";
 // Libraries.
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
-import {BytesLib} from "./utils/BytesLib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract TradableAddresses is Ownable, PermitERC721 {
-    using BytesLib for bytes;
     using SafeTransferLib for address;
 
     error NotAuhtorizedBuyer();
