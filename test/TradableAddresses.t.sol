@@ -19,7 +19,7 @@ contract TradableAddressesTest is Test, HuffTest {
     address immutable owner = makeAddr("owner");
 
     function setUp() public {
-        trader = new TradableAddresses(owner, increaser);
+        trader = new TradableAddresses(owner);
     }
 
     function test_mintAndDeploy() public {

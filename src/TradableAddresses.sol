@@ -34,10 +34,13 @@ contract TradableAddresses is Ownable, PermitERC721 {
 
     /// @dev Want to provide chain censoring / reorg attacks to frontrun the claim & reveal.
     uint256 internal constant COMMIT_REVEAL_DELAY = 10 minutes;
+    uint256 internal constant DEPLOY_PROXY_INITCODE_0_32 =
+        0x60288060093d393df36001600581360334348434363434376d01e4a82b33373d;
+    uint256 internal constant DEPLOY_PROXY_INITCODE_32_17 = 0xe1334e7d8f48795af49247f034521b34f3;
 
-    // TODO: Mine and insert nonce incrementer.
-    bytes internal DEPLOY_PROXY_INITCODE;
-    bytes32 internal immutable DEPLOY_PROXY_INITHASH;
+    bytes32 public immutable DEPLOY_PROXY_INITHASH = keccak256(
+        hex"60288060093d393df36001600581360334348434363434376d01e4a82b33373de1334e7d8f48795af49247f034521b34f3"
+    );
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
         "MintAndSell(bytes32 salt,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
@@ -48,11 +51,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
 
     mapping(bytes32 hash => uint256 time) public commitedAt;
 
-    constructor(address initialOwner, address nonceIncreaser) {
-        DEPLOY_PROXY_INITCODE = abi.encodePacked(
-            hex"602e8060093d393df360013d8136033d3d843d363d3d3773", nonceIncreaser, hex"5af460051b9234f08152f3"
-        );
-        DEPLOY_PROXY_INITHASH = keccak256(DEPLOY_PROXY_INITCODE);
+    constructor(address initialOwner) {
         _initializeOwner(initialOwner);
     }
 
@@ -143,17 +142,20 @@ contract TradableAddresses is Ownable, PermitERC721 {
     ////////////////////////////////////////////////////////////////
 
     function deploy(uint256 id, bytes calldata initcode) external payable returns (address deployed) {
-        if (!approvedOrOwner(msg.sender, id)) revert NotOwnerNorApproved();
+        _burn(msg.sender, id);
         (, uint8 nonce) = getTokenData(id);
-        bytes memory deployProxyInitcode = DEPLOY_PROXY_INITCODE;
         assembly ("memory-safe") {
-            let deployProxy := create2(0, add(deployProxyInitcode, 0x20), mload(deployProxyInitcode), id)
+            mstore(17, DEPLOY_PROXY_INITCODE_32_17)
+            mstore(0, DEPLOY_PROXY_INITCODE_0_32)
+            // Passing value via create is cheaper than passing it via the call.
+            let deployProxy := create2(callvalue(), 0, 49, id)
             let m := mload(0x40)
             mstore8(m, nonce)
             calldatacopy(add(m, 1), initcode.offset, initcode.length)
-            let success := call(gas(), deployProxy, callvalue(), m, add(initcode.length, 1), 0x00, 0x20)
+            let success := call(gas(), deployProxy, 0, m, add(initcode.length, 1), 0x00, 0x20)
             deployed := mload(0x00)
-            // `and(iszero(x), y: 0/1)` is equivalent to `lt(x, y)`.
+            // Checks that `success` is `true` (1), the loaded address is non-zero and that the
+            // actual returndata has the expected size (32).
             if iszero(and(success, lt(iszero(deployed), eq(returndatasize(), 0x20)))) {
                 mstore(0x00, 0x30116425 /* DeploymentFailed() */ )
                 revert(0x1c, 0x04)
@@ -164,11 +166,6 @@ contract TradableAddresses is Ownable, PermitERC721 {
     ////////////////////////////////////////////////////////////////
     //                          HELPERS                           //
     ////////////////////////////////////////////////////////////////
-
-    function approvedOrOwner(address operator, uint256 id) public view returns (bool) {
-        address owner = ownerOf(id);
-        return operator == owner || isApprovedForAll(owner, operator) || getApproved(id) == operator;
-    }
 
     function getTokenData(uint256 id) public view returns (bool minted, uint8 nonce) {
         uint96 extraData = _getExtraData(id);

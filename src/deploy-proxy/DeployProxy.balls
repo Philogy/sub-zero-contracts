@@ -1,16 +1,15 @@
 const NONCE_INCREASER
 
-fn _MAIN_TEMPLATE<z0>() {
+fn _MAIN<z0>() {
     // Copy calldata to memory.
     calldatacopy(z0, z0, calldatasize())
     // Increase nonce.
     one = 1
-    z1 = returndatasize()
     inc_success = delegatecall(gas(), NONCE_INCREASER, z0, one, z0, z0)
     // Create contract.
     initcode_size = sub(calldatasize(), one)
-    addr = create(callvalue(), one, initcode_size)
-    mstore(z1, addr)
+    addr = create(selfbalance(), one, initcode_size)
+    mstore(z0, addr)
     return_len = shl(5, inc_success)
-    return(z1, return_len)
+    return(z0, return_len)
 }
