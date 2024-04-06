@@ -28,7 +28,7 @@ contract TradableAddressesTest is Test, HuffTest {
         uint256 id = getId(user, 0x983974);
         uint8 nonce = 34;
         vm.prank(user);
-        trader.mint(user, bytes32(id), nonce);
+        trader.mint(user, id, nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
@@ -46,7 +46,7 @@ contract TradableAddressesTest is Test, HuffTest {
         uint256 id = getId(user, 0xab19c31);
         uint8 nonce = 21;
         vm.prank(user);
-        trader.mint(user, bytes32(id), nonce);
+        trader.mint(user, id, nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
@@ -59,7 +59,7 @@ contract TradableAddressesTest is Test, HuffTest {
         uint256 id = getId(user, 0xab19c31);
         uint8 nonce = 255;
         vm.prank(user);
-        trader.mint(user, bytes32(id), nonce);
+        trader.mint(user, id, nonce);
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);

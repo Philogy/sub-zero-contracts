@@ -10,7 +10,14 @@ import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 
-/// @author philogy <https://github.com/philogy>
+/**
+ * @author philogy <https://github.com/philogy>
+ * @notice A contract that allows tokenizing, transfering and selling vanity addresses. Addresses are
+ * made independent from the to-be-deployed bytecode via the "CREATE3" pattern.
+ * @dev Methods are grouped by functionality / purpose rather than public / view / internal for the
+ * sake of legibility. Added events on common user methods are avoided for the sake of gas and
+ * because indirect events are already emitted by the underyling ERC721 implementation.
+ */
 contract TradableAddresses is Ownable, PermitERC721 {
     using SafeTransferLib for address;
 
@@ -39,7 +46,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     );
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
-        "MintAndSell(bytes32 salt,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
+        "MintAndSell(uint256 id,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
 
     address public renderer;
@@ -101,7 +108,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
      * change may capture any delta. Do not specify a value higher than what you're willing to pay.
      * @notice Mint & buy a vanity address from the actual salt owner using an off-chain approval.
      * @param to The address that'll receive the token.
-     * @param salt The token's salt.
+     * @param id The token's salt and subsequently id.
      * @param saltNonce The create3 nonce *increase* to tie to the token. The deploy proxy's final
      * deployment nonce will be qual to `saltNonce + 1`. This is because contract nonces start at 1.
      * @param beneficiary The recipient of the ETH sale proceeds. Note that this can be different
@@ -116,7 +123,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
      */
     function mintAndBuyWithSig(
         address to,
-        bytes32 salt,
+        uint256 id,
         uint8 saltNonce,
         address beneficiary,
         uint256 sellerPrice,
@@ -126,7 +133,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
         bytes calldata signature
     ) external payable {
         _checkDeadline(deadline);
-        address owner = _saltOwner(salt);
+        address owner = _saltOwner(id);
         _checkAndUseNonce(owner, nonce);
 
         uint256 buyCost = calculateBuyCost(sellerPrice);
@@ -135,13 +142,13 @@ contract TradableAddresses is Ownable, PermitERC721 {
         _checkBuyer(buyer);
         bytes32 hash = _hashTypedData(
             keccak256(
-                abi.encode(MINT_AND_SELL_TYPEHASH, salt, saltNonce, sellerPrice, beneficiary, buyer, nonce, deadline)
+                abi.encode(MINT_AND_SELL_TYPEHASH, id, saltNonce, sellerPrice, beneficiary, buyer, nonce, deadline)
             )
         );
         // Deals with `address(0)` for us.
         _checkSignature(owner, hash, signature);
 
-        _mint(to, salt, saltNonce);
+        _mint(to, id, saltNonce);
 
         unchecked {
             // Guaranteed not to overflow due to above check.
@@ -159,19 +166,18 @@ contract TradableAddresses is Ownable, PermitERC721 {
      * @dev Mints a salt you own or on behalf of the owner if they've approved you.
      * @notice Mint a vanity address token.
      * @param to Address to receive the newly minted token.
-     * @param salt The CREATE3 salt for the vanity address to be used. Will also be the token ID
+     * @param id The CREATE3 salt for the vanity address to be used. Will also be the token ID
      * for the resulting ERC-721 NFT.
      * @param nonce The CREATE3 nonce increase for the vanity address to be deployed. The actual
      * deployment nonce will be `nonce + 1` because contract nonces start at 1.
      */
-    function mint(address to, bytes32 salt, uint8 nonce) external {
-        address owner = _saltOwner(salt);
+    function mint(address to, uint256 id, uint8 nonce) external {
+        address owner = _saltOwner(id);
         if (msg.sender != owner && !isApprovedForAll(owner, msg.sender)) revert NotOwnerNorApproved();
-        _mint(to, salt, nonce);
+        _mint(to, id, nonce);
     }
 
-    function _mint(address to, bytes32 salt, uint8 nonce) internal {
-        uint256 id = uint256(salt);
+    function _mint(address to, uint256 id, uint8 nonce) internal {
         (bool minted,) = getTokenData(id);
         if (minted) revert AlreadyMinted();
         _mintAndSetExtraDataUnchecked(to, id, uint96(nonce) | MINTED_BIT);
@@ -182,6 +188,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     ////////////////////////////////////////////////////////////////
 
     function deploy(uint256 id, bytes calldata initcode) external payable returns (address deployed) {
+        // Access control for the token is handled by `ERC721._burn`.
         _burn(msg.sender, id);
         (, uint8 nonce) = getTokenData(id);
         assembly ("memory-safe") {
@@ -234,8 +241,8 @@ contract TradableAddresses is Ownable, PermitERC721 {
         }
     }
 
-    function _saltOwner(bytes32 salt) internal pure returns (address) {
-        return address(bytes20(salt));
+    function _saltOwner(uint256 id) internal pure returns (address) {
+        return address(uint160(id >> 96));
     }
 
     ////////////////////////////////////////////////////////////////
