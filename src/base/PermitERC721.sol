@@ -32,7 +32,18 @@ abstract contract PermitERC721 is ERC721, EIP712 {
         bytes32 hash = _hashTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, operator, nonce, deadline)));
         _checkSignature(owner, hash, signature);
         _checkAndUseNonce(owner, nonce);
-        _setIsApprovedForAll(owner, operator, true);
+        // Set `isApprovedForAll(owner, operator) == true`.
+        // Based on Solady's ERC721.setApprovalForAll.
+        assembly ("memory-safe") {
+            // Update the `isApproved` for (`owner`, `operator`).
+            mstore(0x1c, operator)
+            mstore(0x08, _ERC721_MASTER_SLOT_SEED_MASKED)
+            mstore(0x00, owner)
+            sstore(keccak256(0x0c, 0x30), true)
+            // Emit the {ApprovalForAll} event.
+            mstore(0x00, true)
+            log3(0x00, 0x20, _APPROVAL_FOR_ALL_EVENT_SIGNATURE, owner, operator)
+        }
     }
 
     function invalidateNonce(uint256 nonce) external {
@@ -45,6 +56,10 @@ abstract contract PermitERC721 is ERC721, EIP712 {
 
     function _checkAndUseNonce(address user, uint256 nonce) internal {
         if (!_nonces[user].toggle(nonce)) revert NonceAlreadyUsed();
+    }
+
+    function DOMAIN_SEPARATOR() external view returns (bytes32) {
+        return _domainSeparator();
     }
 
     function _domainNameAndVersion() internal view override returns (string memory, string memory) {
@@ -61,23 +76,5 @@ abstract contract PermitERC721 is ERC721, EIP712 {
 
     function _checkSignature(address signer, bytes32 hash, bytes calldata signature) internal view {
         if (!SignatureCheckerLib.isValidSignatureNowCalldata(signer, hash, signature)) revert InvalidSignature();
-    }
-
-    /// @dev Reference: Solady's `ERC721.setApprovalForAll`.
-    function _setIsApprovedForAll(address owner, address operator, bool isApproved) internal {
-        // Set `isApprovedForAll(owner, operator) == isApproved`.
-        assembly ("memory-safe") {
-            // Convert to 0 or 1.
-            isApproved := iszero(iszero(isApproved))
-            // Update the `isApproved` for (`msg.sender`, `operator`).
-            mstore(0x1c, operator)
-            mstore(0x08, _ERC721_MASTER_SLOT_SEED_MASKED)
-            mstore(0x00, owner)
-            sstore(keccak256(0x0c, 0x30), isApproved)
-            // Emit the {ApprovalForAll} event.
-            mstore(0x00, isApproved)
-            // forgefmt: disable-next-item
-            log3(0x00, 0x20, _APPROVAL_FOR_ALL_EVENT_SIGNATURE, shr(96, shl(96, owner)), shr(96, shl(96, operator)))
-        }
     }
 }
