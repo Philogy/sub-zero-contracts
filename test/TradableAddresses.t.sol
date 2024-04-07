@@ -21,7 +21,7 @@ contract TradableAddressesTest is Test, HuffTest {
     address immutable owner = makeAddr("owner");
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
-        "MintAndSell(uint256 id,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
+        "MintAndSell(uint256 id,uint8 saltNonce,uint256 price,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
 
     function setUp() public {

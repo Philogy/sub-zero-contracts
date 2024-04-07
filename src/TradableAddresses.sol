@@ -21,7 +21,7 @@ import {LibRLP} from "solady/src/utils/LibRLP.sol";
 contract TradableAddresses is Ownable, PermitERC721 {
     using SafeTransferLib for address;
 
-    error NotAuhtorizedBuyer();
+    error NotAuthorizedBuyer();
     error InsufficientValue();
     error InvalidFee();
 
@@ -46,7 +46,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     );
 
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
-        "MintAndSell(uint256 id,uint8 saltNonce,uint256 amount,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
+        "MintAndSell(uint256 id,uint8 saltNonce,uint256 price,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
 
     address public renderer;
@@ -151,13 +151,18 @@ contract TradableAddresses is Ownable, PermitERC721 {
         _mint(to, id, saltNonce);
 
         unchecked {
-            // Guaranteed not to overflow due to above check.
+            // Guaranteed not to overflow due to above check (`buyCost > msg.value`).
             uint256 amountLeft = msg.value - buyCost;
             beneficiary.safeTransferETH(sellerPrice);
             if (amountLeft > 0) msg.sender.safeTransferETH(amountLeft);
         }
     }
 
+    /**
+     * @notice Calculate the final buyer's cost given a price and the current fee rate.
+     * @param sellerPrice Input price in ETH.
+     * @return Buyer's final total cost in ETH.
+     */
     function calculateBuyCost(uint256 sellerPrice) public view returns (uint256) {
         return sellerPrice * BPS / (BPS - feeBps);
     }
@@ -235,7 +240,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
     function _checkBuyer(address buyer) internal view {
         assembly ("memory-safe") {
             if iszero(or(iszero(buyer), eq(buyer, caller()))) {
-                mstore(0x00, 0x6067def5 /* NotAuhtorizedBuyer()*/ )
+                mstore(0x00, 0xd7fce0a8 /* NotAuthorizedBuyer() */ )
                 revert(0x1c, 0x04)
             }
         }

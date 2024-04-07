@@ -10,7 +10,7 @@ import {SignatureCheckerLib} from "solady/src/utils/SignatureCheckerLib.sol";
 abstract contract PermitERC721 is ERC721, EIP712 {
     using LibBitmap for LibBitmap.Bitmap;
 
-    error NonceAlreadyUsed();
+    error NonceAlreadyInvalidated();
     error PastDeadline();
     error InvalidSignature();
 
@@ -47,7 +47,7 @@ abstract contract PermitERC721 is ERC721, EIP712 {
     }
 
     function invalidateNonce(uint256 nonce) external {
-        _checkAndUseNonce(msg.sender, nonce);
+        _nonces[msg.sender].set(nonce);
     }
 
     function getNonceIsSet(address user, uint256 nonce) external view returns (bool) {
@@ -55,7 +55,7 @@ abstract contract PermitERC721 is ERC721, EIP712 {
     }
 
     function _checkAndUseNonce(address user, uint256 nonce) internal {
-        if (!_nonces[user].toggle(nonce)) revert NonceAlreadyUsed();
+        if (!_nonces[user].toggle(nonce)) revert NonceAlreadyInvalidated();
     }
 
     function DOMAIN_SEPARATOR() external view returns (bytes32) {
