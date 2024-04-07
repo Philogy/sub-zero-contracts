@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {HuffTest} from "./base/HuffTest.sol";
 import {ERC721} from "solady/src/tokens/ERC721.sol";
 import {TradableAddresses} from "../src/TradableAddresses.sol";
+import {PermitERC721} from "../src/base/PermitERC721.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {Create2Lib} from "../src/utils/Create2Lib.sol";
 import {MockSimple} from "./mocks/MockSimple.sol";
@@ -23,6 +24,9 @@ contract TradableAddressesTest is Test, HuffTest {
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
         "MintAndSell(uint256 id,uint8 saltNonce,uint256 price,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
+
+    bytes32 internal immutable PERMIT_FOR_ALL_TYPEHASH =
+        keccak256("PermitForAll(address operator,uint256 nonce,uint256 deadline)");
 
     function setUp() public {
         setupBase_ffi();
@@ -75,7 +79,7 @@ contract TradableAddressesTest is Test, HuffTest {
         trader.deploy{gas: 250 * 32000}(id, type(Empty).creationCode);
     }
 
-    function test_mintAndBuyAnyBuyerWithFee() public {
+    function test_mintAndBuy_anyBuyerWithFee() public {
         vm.prank(owner);
         trader.setFee(0.02e4);
 
@@ -113,6 +117,66 @@ contract TradableAddressesTest is Test, HuffTest {
         vm.prank(owner);
     }
 
+    struct MintAndSell {
+        uint256 id;
+        uint8 saltNonce;
+        uint256 price;
+        address beneficiary;
+        address buyer;
+        uint256 nonce;
+        uint256 deadline;
+    }
+
+    function test_mintAndBuy_specificBuyer() public {
+        vm.prank(owner);
+        trader.setFee(0.02e4);
+
+        Account memory seller = makeAccount("seller");
+
+        address buyer = makeAddr("buyer");
+        MintAndSell memory sell = MintAndSell({
+            id: getId(seller.addr, 0xc1c1c1c1c1c1c1c1c1c1c1c1),
+            saltNonce: 3,
+            price: 0.98 ether,
+            beneficiary: seller.addr,
+            buyer: buyer,
+            nonce: 34,
+            deadline: type(uint256).max
+        });
+
+        bytes memory sig;
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+                seller.key,
+                mintAndBuyDigest(
+                    sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline
+                )
+            );
+            sig = abi.encodePacked(r, s, v);
+        }
+
+        address other = makeAddr("other");
+        vm.expectRevert(TradableAddresses.NotAuthorizedBuyer.selector);
+        hoax(other, 1 ether);
+        trader.mintAndBuyWithSig{value: 1 ether}(
+            other, sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline, sig
+        );
+
+        address recipient = makeAddr("recipient");
+        hoax(sell.buyer, 1 ether);
+        trader.mintAndBuyWithSig{value: 1 ether}(
+            recipient, sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline, sig
+        );
+        assertEq(trader.ownerOf(sell.id), recipient);
+
+        assertEq(buyer.balance, 0);
+        assertEq(seller.addr.balance, sell.price);
+        assertEq(address(trader).balance, 0.02 ether);
+        assertTrue(trader.getNonceIsSet(seller.addr, sell.nonce));
+
+        vm.prank(owner);
+    }
+
     function test_settingRenderer() public {
         address user = makeAddr("user");
         uint256 id = getId(user, 0);
@@ -123,7 +187,7 @@ contract TradableAddressesTest is Test, HuffTest {
 
         MockRenderer renderer = new MockRenderer("");
         // Test set.
-        vm.expectEmit(true, true, true, true );
+        vm.expectEmit(true, true, true, true);
         emit TradableAddresses.RendererSet(address(renderer));
         vm.prank(owner);
         trader.setRenderer(address(renderer));
@@ -140,7 +204,7 @@ contract TradableAddressesTest is Test, HuffTest {
         assertEq(trader.tokenURI(id), "5");
 
         renderer = new MockRenderer("wow_");
-        vm.expectEmit(true, true, true, true );
+        vm.expectEmit(true, true, true, true);
         emit TradableAddresses.RendererSet(address(renderer));
         vm.prank(owner);
         trader.setRenderer(address(renderer));
@@ -157,6 +221,43 @@ contract TradableAddressesTest is Test, HuffTest {
         vm.expectRevert(TradableAddresses.RendererLockedIn.selector);
         vm.prank(owner);
         trader.setRenderer(address(renderer));
+    }
+
+    function test_approveForAllWithSig() public {
+        Account memory user = makeAccount("user");
+        address operator = makeAddr("operator");
+
+        assertFalse(trader.isApprovedForAll(user.addr, operator));
+
+        uint256 messageNonce = 111;
+        assertFalse(trader.getNonceIsSet(user.addr, messageNonce));
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(user.key, permitForAllDigest(operator, messageNonce, type(uint256).max));
+
+        vm.prank(makeAddr("submitter"));
+        bytes32 vs = bytes32((uint256(v - 27) << 255) | uint256(s));
+        trader.permitForAll(user.addr, operator, messageNonce, type(uint256).max, abi.encodePacked(r, vs));
+
+        assertTrue(trader.getNonceIsSet(user.addr, messageNonce));
+        assertTrue(trader.isApprovedForAll(user.addr, operator));
+    }
+
+    function test_nonceInvalidation() public {
+        Account memory user = makeAccount("user");
+        address operator = makeAddr("operator");
+
+        uint256 messageNonce = 111;
+
+        vm.prank(user.addr);
+        trader.invalidateNonce(messageNonce);
+
+        vm.prank(makeAddr("submitter"));
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(user.key, permitForAllDigest(operator, messageNonce, type(uint256).max));
+        bytes32 vs = bytes32((uint256(v - 27) << 255) | uint256(s));
+        vm.expectRevert(PermitERC721.NonceAlreadyInvalidated.selector);
+        trader.permitForAll(user.addr, operator, messageNonce, type(uint256).max, abi.encodePacked(r, vs));
     }
 
     function getId(address miner, uint96 extra) internal pure returns (uint256) {
@@ -177,6 +278,10 @@ contract TradableAddressesTest is Test, HuffTest {
                 abi.encode(MINT_AND_SELL_TYPEHASH, id, saltNonce, sellerPrice, beneficiary, buyer, nonce, deadline)
             )
         );
+    }
+
+    function permitForAllDigest(address operator, uint256 nonce, uint256 deadline) internal view returns (bytes32) {
+        return _hashTraderTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, operator, nonce, deadline)));
     }
 
     function _hashTraderTypedData(bytes32 structHash) internal view returns (bytes32) {
