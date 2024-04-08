@@ -153,7 +153,7 @@ contract TradableAddresses is Ownable, PermitERC721 {
         unchecked {
             // Guaranteed not to overflow due to above check (`buyCost > msg.value`).
             uint256 amountLeft = msg.value - buyCost;
-            beneficiary.safeTransferETH(sellerPrice);
+            if (sellerPrice > 0) beneficiary.safeTransferETH(sellerPrice);
             if (amountLeft > 0) msg.sender.safeTransferETH(amountLeft);
         }
     }
@@ -192,6 +192,14 @@ contract TradableAddresses is Ownable, PermitERC721 {
     //                         DEPLOYMENT                         //
     ////////////////////////////////////////////////////////////////
 
+    /**
+     * @dev Deploys code to the address underlying the `id` token. Burns the token and requires
+     * the caller to have authorization to transfer the token (direct owner, universal operator or
+     * token approval).
+     * @param id Address token to deploy and burn.
+     * @param initcode Full bytecode including the initialization (or "constructor") code.
+     * @return deployed The address of the contract.
+     */
     function deploy(uint256 id, bytes calldata initcode) external payable returns (address deployed) {
         // Access control for the token is handled by `ERC721._burn`.
         _burn(msg.sender, id);

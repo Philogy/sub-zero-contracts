@@ -6,7 +6,10 @@ import {EIP712} from "solady/src/utils/EIP712.sol";
 import {LibBitmap} from "solady/src/utils/LibBitmap.sol";
 import {SignatureCheckerLib} from "solady/src/utils/SignatureCheckerLib.sol";
 
-/// @author philogy <https://github.com/philogy>
+/**
+ * @author philogy <https://github.com/philogy>
+ * @dev Base extension of ERC721 that adds EIP712, nonce checking and gasless permits.
+ */
 abstract contract PermitERC721 is ERC721, EIP712 {
     using LibBitmap for LibBitmap.Bitmap;
 
@@ -14,17 +17,17 @@ abstract contract PermitERC721 is ERC721, EIP712 {
     error PastDeadline();
     error InvalidSignature();
 
-    /// @dev Copied slot seed constant from Solady.
-    uint256 private constant _ERC721_MASTER_SLOT_SEED_MASKED = 0x0a5a2e7a00000000;
-    /// @dev `keccak256(bytes("ApprovalForAll(address,address,bool)"))`.
-    uint256 private constant _APPROVAL_FOR_ALL_EVENT_SIGNATURE =
-        0x17307eab39ab6107e8899845ad3d59bd9653f200f220920489ca2b5937696c31;
-
     bytes32 internal immutable PERMIT_FOR_ALL_TYPEHASH =
         keccak256("PermitForAll(address operator,uint256 nonce,uint256 deadline)");
 
     mapping(address => LibBitmap.Bitmap) internal _nonces;
 
+    /**
+     * @dev Allows setting the ERC721 universal operator permission (`isApprovedForAll`) via
+     * a separately provided signature.
+     * @param owner The permission granter and expected signer.
+     * @param operator The grantee to become a new universal ERC721 operator.
+     */
     function permitForAll(address owner, address operator, uint256 nonce, uint256 deadline, bytes calldata signature)
         external
     {
@@ -32,18 +35,7 @@ abstract contract PermitERC721 is ERC721, EIP712 {
         bytes32 hash = _hashTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, operator, nonce, deadline)));
         _checkSignature(owner, hash, signature);
         _checkAndUseNonce(owner, nonce);
-        // Set `isApprovedForAll(owner, operator) == true`.
-        // Based on Solady's ERC721.setApprovalForAll.
-        assembly ("memory-safe") {
-            // Update the `isApproved` for (`owner`, `operator`).
-            mstore(0x1c, operator)
-            mstore(0x08, _ERC721_MASTER_SLOT_SEED_MASKED)
-            mstore(0x00, owner)
-            sstore(keccak256(0x0c, 0x30), true)
-            // Emit the {ApprovalForAll} event.
-            mstore(0x00, true)
-            log3(0x00, 0x20, _APPROVAL_FOR_ALL_EVENT_SIGNATURE, owner, operator)
-        }
+        _setApprovalForAll(owner, operator, true);
     }
 
     function invalidateNonce(uint256 nonce) external {

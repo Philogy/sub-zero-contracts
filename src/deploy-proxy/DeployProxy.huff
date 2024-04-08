@@ -1,4 +1,6 @@
 #define macro MAIN() = takes(0) returns(0) {
+    // Can guarantee that `CALLVALUE` will always push 0 because the factory (`TradableAddresses`)
+    // makes the deploy call with a hardcoded value.
     _MAIN(callvalue)
 }
 
@@ -7,29 +9,29 @@
 // balls-insert-start
 #define macro _MAIN(z0) = takes(0) returns(0) {
     // takes:                      []
-    0x1                         // [one]
-    0x5                         // [one, 0x5]
-    dup2                        // [one, 0x5, one]
-    calldatasize                // [one, 0x5, one, calldatasize()]
-    sub                         // [one, 0x5, initcode_size]
-    <z0>                        // [one, 0x5, initcode_size, z0]
-    <z0>                        // [one, 0x5, initcode_size, z0, z0]
-    dup5                        // [one, 0x5, initcode_size, z0, z0, one]
-    <z0>                        // [one, 0x5, initcode_size, z0, z0, one, z0]
-    calldatasize                // [one, 0x5, initcode_size, z0, z0, one, z0, calldatasize()]
-    <z0>                        // [one, 0x5, initcode_size, z0, z0, one, z0, calldatasize(), z0]
-    <z0>                        // [one, 0x5, initcode_size, z0, z0, one, z0, calldatasize(), z0, z0]
-    calldatacopy                // [one, 0x5, initcode_size, z0, z0, one, z0]
-    [NONCE_INCREASER]           // [one, 0x5, initcode_size, z0, z0, one, z0, NONCE_INCREASER]
-    gas                         // [one, 0x5, initcode_size, z0, z0, one, z0, NONCE_INCREASER, gas()]
-    delegatecall                // [one, 0x5, initcode_size, inc_success]
-    swap3                       // [inc_success, 0x5, initcode_size, one]
-    selfbalance                 // [inc_success, 0x5, initcode_size, one, selfbalance()]
-    create                      // [inc_success, 0x5, addr]
-    <z0>                        // [inc_success, 0x5, addr, z0]
-    mstore                      // [inc_success, 0x5]
+    0x1                         // [1]
+    0x5                         // [1, 5]
+    dup2                        // [1, 5, 1]
+    calldatasize                // [1, 5, 1, calldatasize()]
+    sub                         // [1, 5, initcode_size]
+    <z0>                        // [1, 5, initcode_size, 0]
+    <z0>                        // [1, 5, initcode_size, 0, 0]
+    dup5                        // [1, 5, initcode_size, 0, 0, 1]
+    <z0>                        // [1, 5, initcode_size, 0, 0, 1, 0]
+    calldatasize                // [1, 5, initcode_size, 0, 0, 1, 0, calldatasize()]
+    <z0>                        // [1, 5, initcode_size, 0, 0, 1, 0, calldatasize(), 0]
+    <z0>                        // [1, 5, initcode_size, 0, 0, 1, 0, calldatasize(), 0, 0]
+    calldatacopy                // [1, 5, initcode_size, 0, 0, 1, 0]
+    [NONCE_INCREASER]           // [1, 5, initcode_size, 0, 0, 1, 0, NONCE_INCREASER]
+    gas                         // [1, 5, initcode_size, 0, 0, 1, 0, NONCE_INCREASER, gas()]
+    delegatecall                // [1, 5, initcode_size, inc_success]
+    swap3                       // [inc_success, 5, initcode_size, 1]
+    selfbalance                 // [inc_success, 5, initcode_size, 1, selfbalance()]
+    create                      // [inc_success, 5, addr]
+    <z0>                        // [inc_success, 5, addr, 0]
+    mstore                      // [inc_success, 5]
     shl                         // [return_len]
-    <z0>                        // [return_len, z0]
+    <z0>                        // [return_len, 0]
     return                      // []
     // returns:                    []
 }
