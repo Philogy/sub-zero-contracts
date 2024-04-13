@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.25;
+pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {FailingDeploy} from "./mocks/FailingDeploy.sol";
@@ -48,7 +48,7 @@ contract MicroCreate2Test is Test, HuffTest {
         assertEq(simple.balanceOf(user), 0);
     }
 
-    function _predict(bytes32 salt, bytes memory initcode) internal view returns (address) {
+    function _predict(bytes32 salt, bytes memory initcode) internal pure returns (address) {
         bytes32 hash = keccak256(abi.encodePacked(hex"ff", MICRO_CREATE2, salt, keccak256(initcode)));
         return address(uint160(uint256(hash)));
     }
