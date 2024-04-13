@@ -18,6 +18,10 @@ contract MockRenderer is IRenderer {
         _base = base;
     }
 
+    function contractURI() external view returns (string memory) {
+        return string.concat(_base, "ligma");
+    }
+
     function render(uint256, address, uint8 nonce) external view returns (string memory) {
         return string.concat(_base, uint256(nonce).toString());
     }

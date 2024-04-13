@@ -291,12 +291,20 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
         return "ADDR";
     }
 
+    function contractURI() public view returns (string memory) {
+        return _getRenderer().contractURI();
+    }
+
     function tokenURI(uint256 id) public view override returns (string memory) {
-        address currentRenderer = renderer;
-        if (currentRenderer == address(0)) revert NoRenderer();
         (bool minted, uint8 nonce) = getTokenData(id);
         if (!minted) revert TokenDoesNotExist();
         address vanityAddr = computeAddress(bytes32(id), nonce);
-        return IRenderer(currentRenderer).render(id, vanityAddr, nonce);
+        return _getRenderer().render(id, vanityAddr, nonce);
+    }
+
+    function _getRenderer() internal view returns (IRenderer) {
+        address currentRenderer = renderer;
+        if (currentRenderer == address(0)) revert NoRenderer();
+        return IRenderer(currentRenderer);
     }
 }

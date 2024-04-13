@@ -181,10 +181,6 @@ contract VanityMarketTest is Test, HuffTest {
         address user = makeAddr("user");
         uint256 id = getId(user, 0);
 
-        // Test basic errors
-        vm.expectRevert(VanityMarket.NoRenderer.selector);
-        trader.tokenURI(id);
-
         MockRenderer renderer = new MockRenderer("");
         // Test set.
         vm.expectEmit(true, true, true, true);
@@ -200,6 +196,15 @@ contract VanityMarketTest is Test, HuffTest {
         uint8 nonce = 5;
         vm.prank(user);
         trader.mint(user, id, nonce);
+
+        vm.prank(owner);
+        trader.setRenderer(address(0));
+        // Test basic errors
+        vm.expectRevert(VanityMarket.NoRenderer.selector);
+        trader.tokenURI(id);
+
+        vm.prank(owner);
+        trader.setRenderer(address(renderer));
 
         assertEq(trader.tokenURI(id), "5");
 
