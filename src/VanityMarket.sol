@@ -47,6 +47,12 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
         hex"60288060093d393df36001600581360334348434363434376d01e4a82b33373de1334e7d8f48795af49247f034521b34f3"
     );
 
+    /**
+     * @dev Intent to sell the given vanity addresses derived from `(id, saltNonce)`, collecting
+     * `price` in the native asset to `beneficiary`. Can gate the sale to a specific buyer with the
+     * `buyer` field, can be left empty (`address(0)`) to indicate that it's open for anyone to
+     * complete the purchase. Must be signed with the chain-specific domain separator.
+     */
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
         "MintAndSell(uint256 id,uint8 saltNonce,uint256 price,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
@@ -156,7 +162,9 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
         uint256 buyCost = calculateBuyCost(sellerPrice);
         if (buyCost > msg.value) revert InsufficientValue();
 
-        _checkBuyer(buyer);
+        if (buyer != address(0) && buyer != msg.sender && !isApprovedForAll(buyer, msg.sender)) {
+            revert NotAuthorizedBuyer();
+        }
         bytes32 hash = _hashTypedData(
             keccak256(
                 abi.encode(MINT_AND_SELL_TYPEHASH, id, saltNonce, sellerPrice, beneficiary, buyer, nonce, deadline)
@@ -261,16 +269,6 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
         vanity = LibRLP.computeAddress(deployProxy, nonce + 1);
     }
 
-    /// @dev Checks that the caller is either equal to `buyer` or `buyer` is the zero address.
-    function _checkBuyer(address buyer) internal view {
-        assembly ("memory-safe") {
-            if iszero(or(iszero(buyer), eq(buyer, caller()))) {
-                mstore(0x00, 0xd7fce0a8 /* NotAuthorizedBuyer() */ )
-                revert(0x1c, 0x04)
-            }
-        }
-    }
-
     function _saltOwner(uint256 id) internal pure returns (address) {
         return address(uint160(id >> 96));
     }
@@ -289,6 +287,10 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
 
     function symbol() public pure override returns (string memory) {
         return "ADDR";
+    }
+
+    function _domainNameAndVersion() internal pure override returns (string memory, string memory) {
+        return (name(), "1.0");
     }
 
     function contractURI() public view returns (string memory) {

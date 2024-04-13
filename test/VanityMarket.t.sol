@@ -384,6 +384,33 @@ contract VanityMarketTest is Test, HuffTest {
         trader.setRoyalty(0.0e4);
     }
 
+    function test_domainSeparators() public {
+        assertEq(
+            trader.FULL_DOMAIN_SEPARATOR(),
+            keccak256(
+                abi.encode(
+                    keccak256("EIP712Domain(string name,string version,address verifyingContract,uint256 chainId)"),
+                    keccak256(bytes(trader.name())),
+                    keccak256("1.0"),
+                    address(trader),
+                    block.chainid
+                )
+            )
+        );
+
+        assertEq(
+            trader.CROSS_CHAIN_DOMAIN_SEPARATOR(),
+            keccak256(
+                abi.encode(
+                    keccak256("EIP712Domain(string name,string version,address verifyingContract)"),
+                    keccak256(bytes(trader.name())),
+                    keccak256("1.0"),
+                    address(trader)
+                )
+            )
+        );
+    }
+
     function getId(address miner, uint96 extra) internal pure returns (uint256) {
         return (uint256(uint160(miner)) << 96) | uint256(extra);
     }
@@ -409,7 +436,7 @@ contract VanityMarketTest is Test, HuffTest {
     }
 
     function _hashTraderTypedData(bytes32 structHash) internal view returns (bytes32) {
-        return keccak256(abi.encodePacked(hex"1901", trader.DOMAIN_SEPARATOR(), structHash));
+        return keccak256(abi.encodePacked(hex"1901", trader.FULL_DOMAIN_SEPARATOR(), structHash));
     }
 
     function _getRoyalty() internal view returns (address receiver, uint256 royalty) {

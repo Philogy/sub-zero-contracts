@@ -2,7 +2,7 @@
 pragma solidity ^0.8.4;
 
 import {ERC721} from "solady/src/tokens/ERC721.sol";
-import {EIP712} from "solady/src/utils/EIP712.sol";
+import {ERC712} from "./ERC712.sol";
 import {LibBitmap} from "solady/src/utils/LibBitmap.sol";
 import {SignatureCheckerLib} from "solady/src/utils/SignatureCheckerLib.sol";
 
@@ -10,7 +10,7 @@ import {SignatureCheckerLib} from "solady/src/utils/SignatureCheckerLib.sol";
  * @author philogy <https://github.com/philogy>
  * @dev Base extension of ERC721 that adds EIP712, nonce checking and gasless permits.
  */
-abstract contract PermitERC721 is ERC721, EIP712 {
+abstract contract PermitERC721 is ERC721, ERC712 {
     using LibBitmap for LibBitmap.Bitmap;
 
     error NonceAlreadyInvalidated();
@@ -48,18 +48,6 @@ abstract contract PermitERC721 is ERC721, EIP712 {
 
     function _checkAndUseNonce(address user, uint256 nonce) internal {
         if (!_nonces[user].toggle(nonce)) revert NonceAlreadyInvalidated();
-    }
-
-    function DOMAIN_SEPARATOR() external view returns (bytes32) {
-        return _domainSeparator();
-    }
-
-    function _domainNameAndVersion() internal view override returns (string memory, string memory) {
-        return (name(), _version());
-    }
-
-    function _version() internal view virtual returns (string memory) {
-        return "1.0";
     }
 
     function _checkDeadline(uint256 deadline) internal view {
