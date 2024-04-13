@@ -7,7 +7,7 @@ remappings = [
   "solady/src/=lib/solady/src/"
 ]
 solc_version = "0.8.25"
-viaIR = true
-optimizer_runs = 0xffffffff
+viaIR = false
+optimizer_runs = 1_000_000
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
