@@ -207,6 +207,7 @@ contract VanityMarketTest is Test, HuffTest {
         trader.setRenderer(address(renderer));
 
         assertEq(trader.tokenURI(id), "5");
+        assertEq(trader.contractURI(), "ligma");
 
         renderer = new MockRenderer("wow_");
         vm.expectEmit(true, true, true, true);
@@ -215,6 +216,7 @@ contract VanityMarketTest is Test, HuffTest {
         trader.setRenderer(address(renderer));
         assertEq(trader.renderer(), address(renderer));
         assertEq(trader.tokenURI(id), "wow_5");
+        assertEq(trader.contractURI(), "wow_ligma");
 
         address lastRenderer = 0x0000000000007AEa7C08C8d6AE08b2862a662bb4;
         vm.etch(lastRenderer, type(MockRenderer).runtimeCode);
@@ -222,6 +224,7 @@ contract VanityMarketTest is Test, HuffTest {
         vm.prank(owner);
         trader.setRenderer(lastRenderer);
         assertEq(trader.tokenURI(id), "last_5");
+        assertEq(trader.contractURI(), "last_ligma");
 
         vm.expectRevert(VanityMarket.RendererLockedIn.selector);
         vm.prank(owner);
