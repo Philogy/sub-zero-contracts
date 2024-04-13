@@ -3,8 +3,10 @@ pragma solidity ^0.8.24;
 
 // Base contracts & interfaces.
 import {Ownable} from "solady/src/auth/Ownable.sol";
+import {ERC721} from "solady/src/tokens/ERC721.sol";
 import {PermitERC721} from "./base/PermitERC721.sol";
 import {IRenderer} from "./interfaces/IRenderer.sol";
+import {ERC2981} from "solady/src/tokens/ERC2981.sol";
 // Libraries.
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
@@ -18,7 +20,7 @@ import {LibRLP} from "solady/src/utils/LibRLP.sol";
  * sake of legibility. Added events on common user methods are avoided for the sake of gas and
  * because indirect events are already emitted by the underyling ERC721 implementation.
  */
-contract VanityMarket is Ownable, PermitERC721 {
+contract VanityMarket is Ownable, PermitERC721, ERC2981 {
     using SafeTransferLib for address;
 
     error NotAuthorizedBuyer();
@@ -54,6 +56,7 @@ contract VanityMarket is Ownable, PermitERC721 {
 
     constructor(address initialOwner) {
         _initializeOwner(initialOwner);
+        _setDefaultRoyalty(initialOwner, 0);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -83,6 +86,20 @@ contract VanityMarket is Ownable, PermitERC721 {
     function setFee(uint16 newFee) external onlyOwner {
         if (newFee >= BPS) revert InvalidFee();
         emit FeeSet(feeBps = newFee);
+    }
+
+    function setRoyalty(uint16 newRoyalty) external onlyOwner {
+        _setDefaultRoyalty(msg.sender, newRoyalty);
+    }
+
+    function _setOwner(address newOwner) internal override {
+        (, uint256 royaltyBps) = royaltyInfo(0, BPS);
+        _setDefaultRoyalty(newOwner, uint96(royaltyBps));
+        super._setOwner(newOwner);
+    }
+
+    function _feeDenominator() internal pure override returns (uint96) {
+        return uint96(BPS);
     }
 
     /**
@@ -261,6 +278,10 @@ contract VanityMarket is Ownable, PermitERC721 {
     ////////////////////////////////////////////////////////////////
     //                          METADATA                          //
     ////////////////////////////////////////////////////////////////
+
+    function supportsInterface(bytes4 interfaceId) public view override(ERC2981, ERC721) returns (bool) {
+        return ERC2981.supportsInterface(interfaceId) || ERC721.supportsInterface(interfaceId);
+    }
 
     function name() public pure override returns (string memory) {
         return "Tokenized CREATE3 Vanity Addresses";

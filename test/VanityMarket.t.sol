@@ -341,6 +341,41 @@ contract VanityMarketTest is Test, HuffTest {
         );
     }
 
+    function test_auth_transferOwnership() public {
+        address newOwner = makeAddr("newOwner");
+
+        vm.prank(owner);
+        trader.transferOwnership(newOwner);
+
+        assertEq(newOwner, trader.owner());
+    }
+
+    function test_fuzzing_defaultRoyaltyIsZero(uint256 tokenId, uint256 price) public {
+        (address receiver, uint256 value) = trader.royaltyInfo(tokenId, price);
+        assertEq(receiver, owner);
+        assertEq(value, 0);
+    }
+
+    function test_auth_changeRoyalty() public {
+        vm.prank(owner);
+        trader.setRoyalty(0.01e4);
+        (address receiver, uint256 royalty) = _getRoyalty();
+        assertEq(receiver, owner);
+        assertEq(royalty, 0.01e4);
+
+        address newOwner = makeAddr("newOwner");
+        vm.prank(owner);
+        trader.transferOwnership(newOwner);
+
+        (receiver, royalty) = _getRoyalty();
+        assertEq(receiver, newOwner);
+        assertEq(royalty, 0.01e4);
+
+        vm.prank(owner);
+        vm.expectRevert(bytes4(keccak256("Unauthorized()")));
+        trader.setRoyalty(0.0e4);
+    }
+
     function getId(address miner, uint96 extra) internal pure returns (uint256) {
         return (uint256(uint160(miner)) << 96) | uint256(extra);
     }
@@ -367,5 +402,9 @@ contract VanityMarketTest is Test, HuffTest {
 
     function _hashTraderTypedData(bytes32 structHash) internal view returns (bytes32) {
         return keccak256(abi.encodePacked(hex"1901", trader.DOMAIN_SEPARATOR(), structHash));
+    }
+
+    function _getRoyalty() internal view returns (address receiver, uint256 royalty) {
+        (receiver, royalty) = trader.royaltyInfo(0, 1.0e4);
     }
 }
