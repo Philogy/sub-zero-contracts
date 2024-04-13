@@ -260,6 +260,87 @@ contract TradableAddressesTest is Test, HuffTest {
         trader.permitForAll(user.addr, operator, messageNonce, type(uint256).max, abi.encodePacked(r, vs));
     }
 
+    function test_blocksReplay() public {
+        Account memory user = makeAccount("user");
+        address operator = makeAddr("operator");
+        address submitter = makeAddr("submitter");
+
+        uint256 messageNonce = 111;
+
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(user.key, permitForAllDigest(operator, messageNonce, type(uint256).max));
+        bytes32 vs = bytes32((uint256(v - 27) << 255) | uint256(s));
+        vm.prank(submitter);
+        trader.permitForAll(user.addr, operator, messageNonce, type(uint256).max, abi.encodePacked(r, vs));
+
+        assertTrue(trader.isApprovedForAll(user.addr, operator));
+
+        vm.prank(user.addr);
+        trader.setApprovalForAll(operator, false);
+
+        vm.prank(submitter);
+        vm.expectRevert(PermitERC721.NonceAlreadyInvalidated.selector);
+        trader.permitForAll(user.addr, operator, messageNonce, type(uint256).max, abi.encodePacked(r, vs));
+
+        assertFalse(trader.isApprovedForAll(user.addr, operator));
+    }
+
+    function test_cannotSubmitPermitPastDeadline() public {
+        Account memory user = makeAccount("user");
+        address operator = makeAddr("operator");
+        address submitter = makeAddr("submitter");
+
+        uint256 messageNonce = 111;
+        uint256 deadline = block.timestamp + 100 seconds;
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(user.key, permitForAllDigest(operator, messageNonce, deadline));
+        bytes32 vs = bytes32((uint256(v - 27) << 255) | uint256(s));
+
+        vm.warp(deadline + 1);
+
+        vm.prank(submitter);
+        vm.expectRevert(PermitERC721.PastDeadline.selector);
+        trader.permitForAll(user.addr, operator, messageNonce, deadline, abi.encodePacked(r, vs));
+    }
+
+    function test_mintAndBuy_cannotBuyPastDeadline() public {
+        vm.prank(owner);
+        trader.setFee(0.02e4);
+
+        Account memory seller = makeAccount("seller");
+
+        address buyer = makeAddr("buyer");
+        MintAndSell memory sell = MintAndSell({
+            id: getId(seller.addr, 0xc1c1c1c1c1c1c1c1c1c1c1c1),
+            saltNonce: 3,
+            price: 0.98 ether,
+            beneficiary: seller.addr,
+            buyer: buyer,
+            nonce: 34,
+            deadline: block.timestamp + 3 hours
+        });
+
+        bytes memory sig;
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(
+                seller.key,
+                mintAndBuyDigest(
+                    sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline
+                )
+            );
+            sig = abi.encodePacked(r, s, v);
+        }
+
+        vm.warp(sell.deadline + 1);
+
+        address recipient = makeAddr("recipient");
+        hoax(sell.buyer, 1 ether);
+        vm.expectRevert(PermitERC721.PastDeadline.selector);
+        trader.mintAndBuyWithSig{value: 1 ether}(
+            recipient, sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline, sig
+        );
+    }
+
     function getId(address miner, uint96 extra) internal pure returns (uint256) {
         return (uint256(uint160(miner)) << 96) | uint256(extra);
     }
