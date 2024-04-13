@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {HuffTest} from "./base/HuffTest.sol";
 import {ERC721} from "solady/src/tokens/ERC721.sol";
-import {TradableAddresses} from "../src/TradableAddresses.sol";
+import {VanityMarket} from "../src/VanityMarket.sol";
 import {PermitERC721} from "../src/base/PermitERC721.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {Create2Lib} from "../src/utils/Create2Lib.sol";
@@ -16,8 +16,8 @@ import {Empty} from "./mocks/Empty.sol";
 import {console2 as console} from "forge-std/console2.sol";
 
 /// @author philogy <https://github.com/philogy>
-contract TradableAddressesTest is Test, HuffTest {
-    TradableAddresses trader;
+contract VanityMarketTest is Test, HuffTest {
+    VanityMarket trader;
 
     address immutable owner = makeAddr("owner");
 
@@ -30,7 +30,7 @@ contract TradableAddressesTest is Test, HuffTest {
 
     function setUp() public {
         setupBase_ffi();
-        trader = new TradableAddresses(owner);
+        trader = new VanityMarket(owner);
     }
 
     function test_mintAndDeploy() public {
@@ -60,7 +60,7 @@ contract TradableAddressesTest is Test, HuffTest {
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
-        vm.expectRevert(TradableAddresses.DeploymentFailed.selector);
+        vm.expectRevert(VanityMarket.DeploymentFailed.selector);
         trader.deploy(id, type(FailingDeploy).creationCode);
     }
 
@@ -73,7 +73,7 @@ contract TradableAddressesTest is Test, HuffTest {
         assertEq(trader.ownerOf(id), user);
 
         vm.prank(user);
-        vm.expectRevert(TradableAddresses.DeploymentFailed.selector);
+        vm.expectRevert(VanityMarket.DeploymentFailed.selector);
         // Ensure out-of-gas within increaser but sufficient remaining gas to test whether
         // standalone increase revert will actually get bubbled up.
         trader.deploy{gas: 250 * 32000}(id, type(Empty).creationCode);
@@ -156,7 +156,7 @@ contract TradableAddressesTest is Test, HuffTest {
         }
 
         address other = makeAddr("other");
-        vm.expectRevert(TradableAddresses.NotAuthorizedBuyer.selector);
+        vm.expectRevert(VanityMarket.NotAuthorizedBuyer.selector);
         hoax(other, 1 ether);
         trader.mintAndBuyWithSig{value: 1 ether}(
             other, sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline, sig
@@ -182,13 +182,13 @@ contract TradableAddressesTest is Test, HuffTest {
         uint256 id = getId(user, 0);
 
         // Test basic errors
-        vm.expectRevert(TradableAddresses.NoRenderer.selector);
+        vm.expectRevert(VanityMarket.NoRenderer.selector);
         trader.tokenURI(id);
 
         MockRenderer renderer = new MockRenderer("");
         // Test set.
         vm.expectEmit(true, true, true, true);
-        emit TradableAddresses.RendererSet(address(renderer));
+        emit VanityMarket.RendererSet(address(renderer));
         vm.prank(owner);
         trader.setRenderer(address(renderer));
         assertEq(trader.renderer(), address(renderer));
@@ -205,7 +205,7 @@ contract TradableAddressesTest is Test, HuffTest {
 
         renderer = new MockRenderer("wow_");
         vm.expectEmit(true, true, true, true);
-        emit TradableAddresses.RendererSet(address(renderer));
+        emit VanityMarket.RendererSet(address(renderer));
         vm.prank(owner);
         trader.setRenderer(address(renderer));
         assertEq(trader.renderer(), address(renderer));
@@ -218,7 +218,7 @@ contract TradableAddressesTest is Test, HuffTest {
         trader.setRenderer(lastRenderer);
         assertEq(trader.tokenURI(id), "last_5");
 
-        vm.expectRevert(TradableAddresses.RendererLockedIn.selector);
+        vm.expectRevert(VanityMarket.RendererLockedIn.selector);
         vm.prank(owner);
         trader.setRenderer(address(renderer));
     }

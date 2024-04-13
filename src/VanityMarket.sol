@@ -18,7 +18,7 @@ import {LibRLP} from "solady/src/utils/LibRLP.sol";
  * sake of legibility. Added events on common user methods are avoided for the sake of gas and
  * because indirect events are already emitted by the underyling ERC721 implementation.
  */
-contract TradableAddresses is Ownable, PermitERC721 {
+contract VanityMarket is Ownable, PermitERC721 {
     using SafeTransferLib for address;
 
     error NotAuthorizedBuyer();
