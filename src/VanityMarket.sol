@@ -27,6 +27,8 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
     error InsufficientValue();
     error InvalidFee();
 
+    error NotAuthorizedClaimer();
+
     error AlreadyMinted();
 
     error NoRenderer();
@@ -56,6 +58,17 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
     bytes32 internal immutable MINT_AND_SELL_TYPEHASH = keccak256(
         "MintAndSell(uint256 id,uint8 saltNonce,uint256 price,address beneficiary,address buyer,uint256 nonce,uint256 deadline)"
     );
+
+    /**
+     * @dev Intent to allow `claimer` to mint the given vanity address derived from `(id, nonce)`.
+     * Note that this ERC-712 struct must be signed with the cross-chain domain separator, this
+     * means that once signed the `claimer` will be able to mint the token on **all** EVM chains
+     * where this contract is or can be deployed. There is no direct way of revoking a give-up, one
+     * could however frontrun claims cross-chain by minting the tokens to oneself before the permit
+     * is used.
+     */
+    bytes32 internal immutable GIVE_UP_EVERWHERE_TYPEHASH =
+        keccak256("GiveUpEverywhere(uint256 id,uint8 nonce,address claimer,uint256 deadline)");
 
     address public renderer;
     uint16 public feeBps;
@@ -190,6 +203,35 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
      */
     function calculateBuyCost(uint256 sellerPrice) public view returns (uint256) {
         return sellerPrice * BPS / (BPS - feeBps);
+    }
+
+    /**
+     * @dev Claim a token based on a chain-agnostic permit from the salt owner. Caller must be the
+     * `claimer` or an authorized operator of the `claimer`.
+     * @param to The recipient address of the token.
+     * @param id The token's salt and subsequently id.
+     * @param nonce The create3 nonce *increase* to tie to the token. The deploy proxy's final
+     * deployment nonce will be qual to `nonce + 1`. This is because contract nonces start at 1.
+     * @param claimer The address that was originally authorized to claim.
+     * @param deadline UNIX Timestamp after which the permit becomes unusable.
+     * @param signature ECDSA (r, s, v), EIP-2098 or EIP-1271 signature.
+     */
+    function claimGivenUpWithSig(
+        address to,
+        uint256 id,
+        uint8 nonce,
+        address claimer,
+        uint256 deadline,
+        bytes calldata signature
+    ) external {
+        _checkDeadline(deadline);
+        address owner = _saltOwner(id);
+        if (claimer != msg.sender && !isApprovedForAll(claimer, msg.sender)) revert NotAuthorizedClaimer();
+        bytes32 hash =
+            _hashCrossChainData(keccak256(abi.encode(GIVE_UP_EVERWHERE_TYPEHASH, id, nonce, claimer, deadline)));
+        // Deals with `address(0)` for us.
+        _checkSignature(owner, hash, signature);
+        _mint(to, id, nonce);
     }
 
     /**

@@ -20,8 +20,8 @@ abstract contract ERC712 {
     /*                  CONSTANTS AND IMMUTABLES                  */
     /*.•°:°.´+˚.*°.˚:*.´•*.+°.•°:´*.´•*.•°.•°:°.´:•˚°.*°.˚:*.´+°.•*/
 
-    /// @dev `keccak256("EIP712Domain(string name,string version,address verifyingContract,uint256 chainId)")`.
-    bytes32 internal constant _FULL_DOMAIN_TYPEHASH = 0x683648d948ddc959f1aac84b5e4b0c473f96e338fc31fddadbdc74712546b829;
+    /// @dev `keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)")`.
+    bytes32 internal constant _FULL_DOMAIN_TYPEHASH = 0x8b73c3c69bb8fe3d512ecc4cf759cc79239f7b179b0ffacaa9a75d522b39400f;
 
     /// @dev `keccak256("EIP712Domain(string name,string version,address verifyingContract)")`.
     bytes32 internal constant _AGNOSTIC_DOMAIN_TYPEHASH =
@@ -62,9 +62,10 @@ abstract contract ERC712 {
             mstore(add(m, 0x60), address())
             agnosticSeparator := keccak256(m, 0x80)
 
-            // The agnostic and full domain share the first 3 fields so we can reuse the memory.
+            // The agnostic and full domain share the first 2 fields so we can reuse some memory.
             mstore(m, _FULL_DOMAIN_TYPEHASH)
-            mstore(add(m, 0x80), chainid())
+            mstore(add(m, 0x60), chainid())
+            mstore(add(m, 0x80), address())
             fullSeparator := keccak256(m, 0xa0)
         }
         FULL_DOMAIN_SEPARATOR = fullSeparator;

@@ -13,7 +13,7 @@ contract MicroCreate2Test is Test, HuffTest {
         setupBase_ffi();
     }
 
-    function test_inception() public {
+    function test_ffi_inception() public {
         bytes memory c = _huffInitcode("src/micro-create2/MicroCreate2.huff");
         bytes32 salt = 0x736910e11ee80955bc66400158e50c2f7318633f228ac93e3edf7fe7f1341daf;
         (bool success, bytes memory ret) = MICRO_CREATE2.call(abi.encodePacked(salt, c));

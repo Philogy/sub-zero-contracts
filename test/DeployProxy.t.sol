@@ -15,7 +15,7 @@ contract DeployProxyTest is Test, HuffTest {
         setupBase_ffi();
     }
 
-    function test_increases() public {
+    function test_ffi_increases() public {
         bytes memory deployerInitcode = _huffInitcode("src/deploy-proxy/DeployProxy.huff");
 
         for (uint256 i = 0; i < 256; i++) {

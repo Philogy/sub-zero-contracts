@@ -13,10 +13,15 @@ import {MockRenderer} from "./mocks/MockRenderer.sol";
 import {FailingDeploy} from "./mocks/FailingDeploy.sol";
 import {Empty} from "./mocks/Empty.sol";
 
+import {LibString} from "solady/src/utils/LibString.sol";
+
 import {console2 as console} from "forge-std/console2.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract VanityMarketTest is Test, HuffTest {
+    using LibString for address;
+    using LibString for uint256;
+
     VanityMarket trader;
 
     address immutable owner = makeAddr("owner");
@@ -27,6 +32,9 @@ contract VanityMarketTest is Test, HuffTest {
 
     bytes32 internal immutable PERMIT_FOR_ALL_TYPEHASH =
         keccak256("PermitForAll(address operator,uint256 nonce,uint256 deadline)");
+
+    bytes32 internal immutable GIVE_UP_EVERWHERE_TYPEHASH =
+        keccak256("GiveUpEverywhere(uint256 id,uint8 saltNonce,address claimer,uint256 nonce,uint256 deadline)");
 
     function setUp() public {
         setupBase_ffi();
@@ -389,11 +397,11 @@ contract VanityMarketTest is Test, HuffTest {
             trader.FULL_DOMAIN_SEPARATOR(),
             keccak256(
                 abi.encode(
-                    keccak256("EIP712Domain(string name,string version,address verifyingContract,uint256 chainId)"),
+                    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
                     keccak256(bytes(trader.name())),
                     keccak256("1.0"),
-                    address(trader),
-                    block.chainid
+                    block.chainid,
+                    address(trader)
                 )
             )
         );
@@ -409,6 +417,79 @@ contract VanityMarketTest is Test, HuffTest {
                 )
             )
         );
+    }
+
+    function test_ffi_mintAndBuyMatchesSig() public {
+        Account memory seller = makeAccount("seller");
+
+        address buyer = makeAddr("buyer");
+        MintAndSell memory sell = MintAndSell({
+            id: getId(seller.addr, 0xc1c1c1c1c1c1c1c1c1c1c1c1),
+            saltNonce: 3,
+            price: 1 ether,
+            beneficiary: seller.addr,
+            buyer: address(0),
+            nonce: 34,
+            deadline: type(uint256).max
+        });
+
+        string[] memory args = new string[](7);
+        args[0] = sell.id.toString();
+        args[1] = uint256(sell.saltNonce).toString();
+        args[2] = sell.price.toString();
+        args[3] = sell.beneficiary.toHexString();
+        args[4] = sell.buyer.toHexString();
+        args[5] = sell.nonce.toString();
+        args[6] = sell.deadline.toString();
+        bytes32 hash = _erc712Cli("MintAndSell", args);
+
+        bytes memory sig;
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(seller.key, hash);
+            sig = abi.encodePacked(r, s, v);
+        }
+
+        address recipient = makeAddr("recipient");
+        hoax(buyer, 1 ether);
+        trader.mintAndBuyWithSig{value: 1 ether}(
+            recipient, sell.id, sell.saltNonce, sell.beneficiary, sell.price, sell.buyer, sell.nonce, sell.deadline, sig
+        );
+        assertEq(trader.ownerOf(sell.id), recipient);
+
+        assertEq(buyer.balance, 0);
+        assertEq(seller.addr.balance, sell.price);
+        assertTrue(trader.getNonceIsSet(seller.addr, sell.nonce));
+    }
+
+    function test_ffi_chainIndependentGiveUp() public {
+        Account memory gifter = makeAccount("gifter");
+        uint8 nonce = 134;
+        uint256 id = getId(gifter.addr, 0xdadadadadadadadadadadada);
+        address claimer = makeAddr("claimer");
+        uint256 deadline = type(uint256).max;
+        string[] memory args = new string[](4);
+        args[0] = id.toString();
+        args[1] = uint256(nonce).toString();
+        args[2] = claimer.toHexString();
+        args[3] = deadline.toString();
+        bytes32 hash = _erc712Cli("GiveUpEverywhere", args);
+
+        bytes memory sig;
+        {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(gifter.key, hash);
+            uint256 vs = (uint256(v - 27) << 255) | uint256(s);
+            sig = abi.encodePacked(r, vs);
+        }
+
+        address representative = makeAddr("representative");
+        vm.prank(claimer);
+        trader.setApprovalForAll(representative, true);
+
+        address recipient = makeAddr("recipient");
+        vm.prank(representative);
+        trader.claimGivenUpWithSig(recipient, id, nonce, claimer, deadline, sig);
+
+        assertEq(trader.ownerOf(id), recipient);
     }
 
     function getId(address miner, uint96 extra) internal pure returns (uint256) {
@@ -435,8 +516,27 @@ contract VanityMarketTest is Test, HuffTest {
         return _hashTraderTypedData(keccak256(abi.encode(PERMIT_FOR_ALL_TYPEHASH, operator, nonce, deadline)));
     }
 
+    function _erc712Cli(string memory name, string[] memory args) internal returns (bytes32) {
+        string[] memory fullArgs = new string[](5 + args.length);
+        fullArgs[0] = "bun";
+        fullArgs[1] = "script/erc712/index.ts";
+        fullArgs[2] = address(trader).toHexString();
+        fullArgs[3] = block.chainid.toString();
+        fullArgs[4] = name;
+        for (uint256 i = 0; i < args.length; i++) {
+            fullArgs[5 + i] = args[i];
+        }
+        bytes memory ret = vm.ffi(fullArgs);
+        require(ret.length == 0x20, "ERC712 CLI failed");
+        return bytes32(ret);
+    }
+
     function _hashTraderTypedData(bytes32 structHash) internal view returns (bytes32) {
         return keccak256(abi.encodePacked(hex"1901", trader.FULL_DOMAIN_SEPARATOR(), structHash));
+    }
+
+    function _hashCrossChainTypedData(bytes32 structHash) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(hex"1901", trader.CROSS_CHAIN_DOMAIN_SEPARATOR(), structHash));
     }
 
     function _getRoyalty() internal view returns (address receiver, uint256 royalty) {
