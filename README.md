@@ -1,6 +1,6 @@
 # Vanity Market
 
-> An efficient way to mind and transact vanity addresses, tokenized as
+> An efficient way to mine and transact vanity addresses, tokenized as
 > [ERC-721](https://eips.ethereum.org/EIPS/eip-721) tokens.
 
 
