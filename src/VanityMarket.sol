@@ -11,6 +11,7 @@ import {ERC2981} from "solady/src/tokens/ERC2981.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
+import {LibZip} from "solady/src/utils/LibZip.sol";
 
 /**
  * @author philogy <https://github.com/philogy>
@@ -72,6 +73,14 @@ contract VanityMarket is Ownable, PermitERC721, ERC2981 {
 
     address public renderer;
     uint16 public feeBps;
+
+    /// @dev Allows for easy compression on L2s.
+    fallback() external payable {
+        LibZip.cdFallback();
+    }
+
+    /// @dev To silence compiler warning.
+    receive() external payable {}
 
     constructor(address initialOwner) {
         _initializeOwner(initialOwner);
