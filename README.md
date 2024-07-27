@@ -25,6 +25,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Sepolia Base
 - Ethereum Mainnet
 - Base
+- Avalanche C-chain
 
 ## License
 
