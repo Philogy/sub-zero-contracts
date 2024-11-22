@@ -59,7 +59,7 @@ const getBitmapSlot = (slot: any, index: bigint): string => {
   );
 };
 
-const [nonce, chainId] = await (async function() {
+const [nonce, chainId] = await (async function () {
   if (args["rpc-url"] !== undefined) {
     const provider = new JsonRpcProvider(args["rpc-url"]);
     const chainId = (await provider.getNetwork()).chainId;
