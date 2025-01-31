@@ -27,6 +27,9 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Base
 - Avalanche C-chain
 - Mantle
+- Fraxtal
+- Polygon POS
+- Polygon zkEVM
 
 ## License
 
