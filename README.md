@@ -25,8 +25,11 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Sepolia Base
 - Ethereum Mainnet
 - Base
+- Optimism Mainnet
+- Arbitrum One
 - Avalanche C-chain
 - Mantle
+- Blast
 - Fraxtal
 - Polygon POS
 - Polygon zkEVM
