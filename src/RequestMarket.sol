@@ -18,7 +18,14 @@ contract RequestMarket is Ownable {
         uint128 reward;
     }
 
-    event NewRequest();
+    event NewRequest(
+        uint256 packed_amount_owner,
+        uint256 packed_address_mask_unlock_delay,
+        uint256 packed_address_target_capitalization_map
+    );
+    event Fulfilled(bytes32 id);
+    event RefundInitiated(bytes32 id);
+    event RefundCompleted(bytes32 id);
 
     ISubZeroVanityMarket internal constant VANITY_MARKET =
         ISubZeroVanityMarket(0x000000000000b361194cfe6312EE3210d53C15AA);
@@ -55,7 +62,11 @@ contract RequestMarket is Ownable {
         state.reward += uint128(msg.value);
         state.initiated_refund_at = REQUEST_LOCKED;
 
-        // TODO: event
+        emit NewRequest(
+            (uint256(uint160(msg.sender)) << 96) | uint96(msg.value),
+            (uint256(address_mask) << 96) | unlock_delay,
+            (uint256(address_target) << 96) | capitalization_map
+        );
     }
 
     function fulfill(
@@ -78,7 +89,7 @@ contract RequestMarket is Ownable {
         }
         _delete(state);
 
-        // TODO: event
+        emit Fulfilled(_id(state));
 
         VANITY_MARKET.mint(owner, id, nonce);
     }
@@ -94,9 +105,13 @@ contract RequestMarket is Ownable {
         if (state.initiated_refund_at != REQUEST_LOCKED) revert RequestMissingOrNotLocked();
         state.initiated_refund_at = uint64(block.timestamp);
 
-        // TODO: event
+        emit RefundInitiated(_id(state));
     }
 
+    /**
+     * @dev Triggers a refund that's passed it's unlock period, NOTE: until this is called the
+     * request may still be filled.
+     */
     function complete_refund(
         uint32 unlock_delay,
         uint160 address_mask,
@@ -111,7 +126,7 @@ contract RequestMarket is Ownable {
         if (!(block.timestamp <= initiated_refund_at + unlock_delay)) revert RefundStillInProgress();
         _delete(state);
 
-        // TODO: event
+        emit RefundCompleted(_id(state));
 
         msg.sender.safeTransferETH(reward);
     }
@@ -142,7 +157,7 @@ contract RequestMarket is Ownable {
         }
     }
 
-    function _id(RequestState storage state) internal pure returns (uint256 id) {
+    function _id(RequestState storage state) internal pure returns (bytes32 id) {
         assembly {
             id := state.slot
         }
