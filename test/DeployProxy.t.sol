@@ -43,4 +43,8 @@ contract DeployProxyTest is Test, HuffTest {
             if (!broke) fail("Wtf no nonce");
         }
     }
+
+    function fail(string memory err) internal {
+        assertTrue(false, err);
+    }
 }

@@ -366,7 +366,7 @@ contract VanityMarketTest is Test, HuffTest {
         assertEq(newOwner, trader.owner());
     }
 
-    function test_fuzzing_defaultRoyaltyIsZero(uint256 tokenId, uint256 price) public {
+    function test_fuzzing_defaultRoyaltyIsZero(uint256 tokenId, uint256 price) public view {
         (address receiver, uint256 value) = trader.royaltyInfo(tokenId, price);
         assertEq(receiver, owner);
         assertEq(value, 0);
@@ -392,7 +392,7 @@ contract VanityMarketTest is Test, HuffTest {
         trader.setRoyalty(0.0e4);
     }
 
-    function test_domainSeparators() public {
+    function test_domainSeparators() public view {
         assertEq(
             trader.FULL_DOMAIN_SEPARATOR(),
             keccak256(
