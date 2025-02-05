@@ -162,8 +162,21 @@ contract RequestMarket is Ownable {
 
         uint256 checksum_hash;
         assembly ("memory-safe") {
-            let w := shr(32, to_be_minted)
-            w := and(0x0000000000000000ffffffffffffffff0000000000000000ffffffffffffffff, or(shl(64, w), w))
+            // forgefmt: disable-start
+            let alphabet := 0x3031323334353637383961626364656600000000000000000000000000000000
+            mstore8(0, byte(and(shr(156, to_be_minted), 0xf), alphabet))
+            mstore8(1, byte(and(shr(152, to_be_minted), 0xf), alphabet))
+            mstore8(2, byte(and(shr(148, to_be_minted), 0xf), alphabet))
+            mstore8(3, byte(and(shr(144, to_be_minted), 0xf), alphabet))
+            mstore8(4, byte(and(shr(140, to_be_minted), 0xf), alphabet))
+            mstore8(5, byte(and(shr(136, to_be_minted), 0xf), alphabet))
+            mstore8(6, byte(and(shr(132, to_be_minted), 0xf), alphabet))
+            mstore8(7, byte(and(shr(128, to_be_minted), 0xf), alphabet))
+            // forgefmt: disable-end
+
+            // Spread remaining 32 nibbles into their own bytes.
+            let w := to_be_minted
+            w := or(shl(64, and(0xffffffffffffffff0000000000000000, w)), and(0xffffffffffffffff, w))
             w := and(0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff, or(shl(32, w), w))
             w := and(0x0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff0000ffff, or(shl(16, w), w))
             w := and(0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff, or(shl(8, w), w))
@@ -173,6 +186,7 @@ contract RequestMarket is Ownable {
                     and(w, 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f)
                 )
 
+            // Determine which byte is going to be a letter.
             let letter_map := and(w, 0x0606060606060606060606060606060606060606060606060606060606060606)
             letter_map :=
                 and(
@@ -180,28 +194,17 @@ contract RequestMarket is Ownable {
                     0x0101010101010101010101010101010101010101010101010101010101010101
                 )
 
+            // Build characters.
             w :=
                 sub(
                     xor(xor(w, 0x3030303030303030303030303030303030303030303030303030303030303030), mul(0x58, letter_map)),
                     letter_map
                 )
-            mstore(0, w)
-
-            // forgefmt: disable-start
-            let alphabet := 0x3031323334353637383961626364656600000000000000000000000000000000
-            mstore8(32, byte(and(shr(28, to_be_minted), 15), alphabet))
-            mstore8(33, byte(and(shr(24, to_be_minted), 15), alphabet))
-            mstore8(34, byte(and(shr(20, to_be_minted), 15), alphabet))
-            mstore8(35, byte(and(shr(16, to_be_minted), 15), alphabet))
-            mstore8(36, byte(and(shr(12, to_be_minted), 15), alphabet))
-            mstore8(37, byte(and(shr(8, to_be_minted), 15), alphabet))
-            mstore8(38, byte(and(shr(4, to_be_minted), 15), alphabet))
-            mstore8(39, byte(and(shr(0, to_be_minted), 15), alphabet))
-            // forgefmt: disable-end
+            mstore(8, w)
 
             checksum_hash := keccak256(0, 40)
         }
-        // Build a map where every nibble tracks whether the character is a letter or not
+        // Build a map where every nibble tracks whether the character is a letter or not.
         uint256 two_four_bits = uint256(uint160(to_be_minted)) & 0x006666666666666666666666666666666666666666;
         uint256 is_letter_map = uint256(uint160(to_be_minted)) & ((two_four_bits | (two_four_bits << 1)) << 1);
         // Map where each nibble tracks whether letter is uppercase
