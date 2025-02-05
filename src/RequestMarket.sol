@@ -253,10 +253,35 @@ contract RequestMarket is Ownable {
         // We now binary-AND that with the EIP-55 checksum to get a map of whether a digit is upper case.
         uint256 is_upper_map = ((is_letter_map & (checksum_hash >> 96)) >> 3) & UPPER_MAP_MASK;
 
-        // Fold upper map onto itself such that each nibble holds the upper info: | <i>  <i + 20> |
-        is_upper_map = is_upper_map | (is_upper_map >> 78);
+        /**
+         * ## Checking Capitalization against the map.
+         *
+         * The `capitalization_map` is an 80-bit map consisting 20x nibbles with each nibble
+         * containing 2x 2-bit cells. The i-th nibble contains cells that check the capitalization
+         * for the i-th and (i+20)-th letter in the address.
+         *
+         * Each 2-bit cell represents a capitalization pattern.
+         *
+         *   upper   active  |         meaning          |
+         * ==============================================
+         *     0       0     |       any character      |
+         *     0       1     |  only lowercase / digit  |
+         *     1       0     |       always invalid     |
+         *     1       1     |      only uppercase      |
+         *
+         * Note: The `capitalization_map` cannot enforce something to be lowercase & a letter,
+         * you can enforce your address to have a specific letter at a position via `address_mask` &
+         * `address_target`.
+         *
+         * For each letter we can check whether it's capitalization is correct via the expression:
+         * `(letter.isUpper() && active) == upper`. This is also by the pattern 0b10 is considered
+         * "invalid" as it will always result in false.
+         */
 
-        return (is_upper_map & capitalization_map) ^ ((capitalization_map >> 1) & CAP_MAP_MASK) == 0;
+        // Fold upper map onto itself to create nibbles with 2x 2-bit cells following the
+        // `capitalization_map` structure.
+        is_upper_map = is_upper_map | (is_upper_map >> 78);
+        return ((is_upper_map & capitalization_map) ^ (capitalization_map >> 1)) & CAP_MAP_MASK == 0;
     }
 
     function _compute_address(bytes32 salt, uint8 nonce) internal pure returns (address vanity) {
