@@ -4,7 +4,8 @@ out = "out"
 libs = ["lib"]
 evm_version = "paris"
 remappings = [
-  "solady/src/=lib/solady/src/"
+  "solady/src/=lib/solady/src/",
+  "solady/test/=lib/solady/test/"
 ]
 solc_version = "0.8.25"
 viaIR = false
