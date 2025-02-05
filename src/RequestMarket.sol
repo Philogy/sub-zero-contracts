@@ -174,7 +174,7 @@ contract RequestMarket is Ownable {
             mstore8(7, byte(and(shr(128, to_be_minted), 0xf), alphabet))
             // forgefmt: disable-end
 
-            // Spread remaining 32 nibbles into their own bytes.
+            // Spread remaining nibbles [8..40] into their own bytes.
             let w := to_be_minted
             w := or(shl(64, and(0xffffffffffffffff0000000000000000, w)), and(0xffffffffffffffff, w))
             w := and(0x00000000ffffffff00000000ffffffff00000000ffffffff00000000ffffffff, or(shl(32, w), w))
@@ -186,15 +186,57 @@ contract RequestMarket is Ownable {
                     and(w, 0x0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f)
                 )
 
-            // Determine which byte is going to be a letter.
-            let letter_map := and(w, 0x0606060606060606060606060606060606060606060606060606060606060606)
-            letter_map :=
+            /**
+             * ## Determines which byte is going to be a letter (byte indexed).
+             *
+             * Looking at the hex alphabet and its bits:
+             *
+             *      |      Binary      |          ASCII Binary            |
+             *  Hex |  b4  b3  b2  b1  |  a8  a7  a6  a5  b4  b3  b2  b1  |
+             *  ===========================================================
+             *  '0' |  0   0   0   0   |  0   0   1   1   0   0   0   0   |
+             *  '1' |  0   0   0   1   |  0   0   1   1   0   0   0   1   |
+             *  '2' |  0   0   1   0   |  0   0   1   1   0   0   1   0   |
+             *  '3' |  0   0   1   1   |  0   0   1   1   0   0   1   1   |
+             *  '4' |  0   1   0   0   |  0   0   1   1   0   1   0   0   |
+             *  '5' |  0   1   0   1   |  0   0   1   1   0   1   0   1   |
+             *  '6' |  0   1   1   0   |  0   0   1   1   0   1   1   0   |
+             *  '7' |  0   1   1   1   |  0   0   1   1   0   1   1   1   |
+             *  '8' |  1   0   0   0   |  0   0   1   1   1   0   0   0   |
+             *  '9' |  1   0   0   1   |  0   0   1   1   1   0   0   1   |
+             *  'a' |  1   0   1   0   |  0   1   1   0   0   0   0   1   |
+             *  'b' |  1   0   1   1   |  0   1   1   0   0   0   1   0   |
+             *  'c' |  1   1   0   0   |  0   1   1   0   0   0   1   1   |
+             *  'd' |  1   1   0   1   |  0   1   1   0   0   1   0   0   |
+             *  'e' |  1   1   1   0   |  0   1   1   0   0   1   0   1   |
+             *  'f' |  1   1   1   1   |  0   1   1   0   0   1   1   0   |
+             *
+             * Notice how all letters, have b4 set to 1. However '8' & '9' also do. So to exclude
+             * them we can simply check whether b3 or b2 is also set giving us the expression:
+             * `b4 && (b3 || b2)`. We can compute this for all 32-bytes simultaneously by leveraging
+             * a couple bit operations:
+             */
+            let letter_map :=
                 and(
-                    shr(3, and(w, shl(1, or(letter_map, shl(1, letter_map))))),
+                    shr(3, and(w, shl(1, or(w, shl(1, w))))),
                     0x0101010101010101010101010101010101010101010101010101010101010101
                 )
 
-            // Build characters.
+            /**
+             * ## Convert the Bits into their Hex Representation in ASCII.
+             *
+             * Notice that from the alphabet, if we take the original binary as `x` we can convert
+             * it to ASCII based on if it's a letter or not like this:
+             *
+             *           a8   a7   a6   a5   a4   a3   a2   a1
+             * digit:     0    0    1    1   [       x       ]
+             * letter:    0    1    1    0   [   8 ^ x - 1   ]
+             *
+             * Now we can achieve the above individually for either digits or letters using bit
+             * operations but must do so conditionally for every byte. This is why we constructed
+             * the letter bitmap, this let's us use it as a selector to conditionaly only apply
+             * operations to bytes that are letters or not.
+             */
             w :=
                 sub(
                     xor(xor(w, 0x3030303030303030303030303030303030303030303030303030303030303030), mul(0x58, letter_map)),
@@ -204,10 +246,11 @@ contract RequestMarket is Ownable {
 
             checksum_hash := keccak256(0, 40)
         }
-        // Build a map where every nibble tracks whether the character is a letter or not.
-        uint256 two_four_bits = uint256(uint160(to_be_minted)) & 0x006666666666666666666666666666666666666666;
-        uint256 is_letter_map = uint256(uint160(to_be_minted)) & ((two_four_bits | (two_four_bits << 1)) << 1);
-        // Map where each nibble tracks whether letter is uppercase
+
+        // We need to rebuild the `letter_map` but for the entire address & nibble-indexed.
+        uint256 bits = uint256(uint160(to_be_minted));
+        uint256 is_letter_map = bits & ((bits | (bits << 1)) << 1);
+        // We now binary-AND that with the EIP-55 checksum to get a map of whether a digit is upper case.
         uint256 is_upper_map = ((is_letter_map & (checksum_hash >> 96)) >> 3) & UPPER_MAP_MASK;
 
         // Fold upper map onto itself such that each nibble holds the upper info: | <i>  <i + 20> |
