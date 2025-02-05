@@ -56,12 +56,8 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
             _brutalizedUint160(address_target),
             _brutalizedUint80(capitalization_map)
         );
-        bytes32 slot;
-        assembly ("memory-safe") {
-            slot := state.slot
-        }
         assertEq(
-            slot,
+            _id(state),
             keccak256(
                 abi.encodePacked(
                     owner_, unlock_delay, address_mask, address_target, capitalization_map, uint32(_REQUEST_STATE_SLOT)
