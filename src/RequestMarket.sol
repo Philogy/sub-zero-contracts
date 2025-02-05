@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 import {ISubZeroVanityMarket} from "./interfaces/ISubZeroVanityMarket.sol";
 import {Create2Lib} from "./utils/Create2Lib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
-import {LibString} from "solady/src/utils/LibString.sol";
 import {Ownable} from "solady/src/auth/Ownable.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 
@@ -149,7 +148,6 @@ contract RequestMarket is Ownable {
         }
     }
 
-    uint256 internal constant HEX_ALPHABET = 0x3031323334353637383961626364656600000000000000000000000000000000;
     uint256 internal constant UPPER_MAP_MASK = 0x001111111111111111111111111111111111111111;
     uint256 internal constant CAP_MAP_MASK = 0x55555555555555555555;
 
@@ -164,18 +162,53 @@ contract RequestMarket is Ownable {
 
         uint256 checksum_hash;
         assembly ("memory-safe") {
-            let addr := shl(96, to_be_minted)
-            for { let i := 0 } 1 {} {
-                let b := byte(shr(1, i), addr)
-                mstore8(i, byte(shr(4, b), HEX_ALPHABET))
-                mstore8(add(i, 1), byte(and(0xf, b), HEX_ALPHABET))
-                i := add(i, 2)
-                if iszero(lt(i, 40)) { break }
-            }
+            // forgefmt: disable-start
+            let alphabet := 0x3031323334353637383961626364656600000000000000000000000000000000
+            mstore8( 0, byte(and(shr(156, to_be_minted), 15), alphabet))
+            mstore8( 1, byte(and(shr(152, to_be_minted), 15), alphabet))
+            mstore8( 2, byte(and(shr(148, to_be_minted), 15), alphabet))
+            mstore8( 3, byte(and(shr(144, to_be_minted), 15), alphabet))
+            mstore8( 4, byte(and(shr(140, to_be_minted), 15), alphabet))
+            mstore8( 5, byte(and(shr(136, to_be_minted), 15), alphabet))
+            mstore8( 6, byte(and(shr(132, to_be_minted), 15), alphabet))
+            mstore8( 7, byte(and(shr(128, to_be_minted), 15), alphabet))
+            mstore8( 8, byte(and(shr(124, to_be_minted), 15), alphabet))
+            mstore8( 9, byte(and(shr(120, to_be_minted), 15), alphabet))
+            mstore8(10, byte(and(shr(116, to_be_minted), 15), alphabet))
+            mstore8(11, byte(and(shr(112, to_be_minted), 15), alphabet))
+            mstore8(12, byte(and(shr(108, to_be_minted), 15), alphabet))
+            mstore8(13, byte(and(shr(104, to_be_minted), 15), alphabet))
+            mstore8(14, byte(and(shr(100, to_be_minted), 15), alphabet))
+            mstore8(15, byte(and(shr( 96, to_be_minted), 15), alphabet))
+            mstore8(16, byte(and(shr( 92, to_be_minted), 15), alphabet))
+            mstore8(17, byte(and(shr( 88, to_be_minted), 15), alphabet))
+            mstore8(18, byte(and(shr( 84, to_be_minted), 15), alphabet))
+            mstore8(19, byte(and(shr( 80, to_be_minted), 15), alphabet))
+            mstore8(20, byte(and(shr( 76, to_be_minted), 15), alphabet))
+            mstore8(21, byte(and(shr( 72, to_be_minted), 15), alphabet))
+            mstore8(22, byte(and(shr( 68, to_be_minted), 15), alphabet))
+            mstore8(23, byte(and(shr( 64, to_be_minted), 15), alphabet))
+            mstore8(24, byte(and(shr( 60, to_be_minted), 15), alphabet))
+            mstore8(25, byte(and(shr( 56, to_be_minted), 15), alphabet))
+            mstore8(26, byte(and(shr( 52, to_be_minted), 15), alphabet))
+            mstore8(27, byte(and(shr( 48, to_be_minted), 15), alphabet))
+            mstore8(28, byte(and(shr( 44, to_be_minted), 15), alphabet))
+            mstore8(29, byte(and(shr( 40, to_be_minted), 15), alphabet))
+            mstore8(30, byte(and(shr( 36, to_be_minted), 15), alphabet))
+            mstore8(31, byte(and(shr( 32, to_be_minted), 15), alphabet))
+            mstore8(32, byte(and(shr( 28, to_be_minted), 15), alphabet))
+            mstore8(33, byte(and(shr( 24, to_be_minted), 15), alphabet))
+            mstore8(34, byte(and(shr( 20, to_be_minted), 15), alphabet))
+            mstore8(35, byte(and(shr( 16, to_be_minted), 15), alphabet))
+            mstore8(36, byte(and(shr( 12, to_be_minted), 15), alphabet))
+            mstore8(37, byte(and(shr(  8, to_be_minted), 15), alphabet))
+            mstore8(38, byte(and(shr(  4, to_be_minted), 15), alphabet))
+            mstore8(39, byte(and(shr(  0, to_be_minted), 15), alphabet))
+            // forgefmt: disable-end
 
             checksum_hash := keccak256(0, 40)
         }
-        // Build a map where every nibble tracks whether the letter is uppercase or not
+        // Build a map where every nibble tracks whether the character is a letter or not
         uint256 two_four_bits = uint256(uint160(to_be_minted)) & 0x006666666666666666666666666666666666666666;
         uint256 is_letter_map = uint256(uint160(to_be_minted)) & ((two_four_bits | (two_four_bits << 1)) << 1);
         // Map where each nibble tracks whether letter is uppercase
