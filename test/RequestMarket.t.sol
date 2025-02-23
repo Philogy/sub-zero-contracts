@@ -10,6 +10,9 @@ import {VanityMarket} from "src/VanityMarket.sol";
 import {LibString} from "solady/src/utils/LibString.sol";
 import {Brutalizer} from "solady/test/utils/Brutalizer.sol";
 
+import {Create2Lib} from "src/utils/Create2Lib.sol";
+import {LibRLP} from "solady/src/utils/LibRLP.sol";
+
 import {console} from "forge-std/console.sol";
 
 /// @author philogy <https://github.com/philogy>
@@ -19,7 +22,7 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
     address fulfiller = makeAddr("fulfiller");
     address request_owner = makeAddr("request_owner");
-    RequestMarket request_market;
+    RequestMarket market;
 
     function setUp() public {
         setupBase_ffi();
@@ -30,16 +33,161 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
         // refetch owner in case changed from initial
         vm.label(market_owner = MARKET.owner(), "market_owner");
 
-        request_market = new RequestMarket(request_owner);
+        market = new RequestMarket(request_owner);
 
         vm.prank(fulfiller);
-        MARKET.setApprovalForAll(address(request_market), true);
+        MARKET.setApprovalForAll(address(market), true);
     }
 
     enum Caps {
         None,
         Lower,
         Upper
+    }
+
+    function test_fulfill() public {
+        address user = makeAddr("user");
+        uint256 value = 1 ether;
+        uint32 delay = 1 days;
+        uint160 mask = 0x00fFf0000000000000000000000000000000000000;
+        uint160 target = 0x00ccc0000000000000000000000000000000000000;
+        uint80 cap_map = _strToCapMap("lll.....................................");
+
+        assertEq(market.claimable_eth(), 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit NewRequest(
+            _pack(bytes20(user), uint96(value)),
+            _pack(bytes20(mask), uint96(delay)),
+            _pack(bytes20(target), uint96(cap_map))
+        );
+        hoax(user, value);
+        market.request{value: value}(delay, mask, target, cap_map);
+
+        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, value, "req.reward != value");
+        assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
+
+        (uint256 id, uint8 nonce) = _mine(fulfiller, mask, target, cap_map);
+
+        vm.expectEmit(true, true, true, true);
+        emit Fulfilled(_id(_request_state(user, delay, mask, target, cap_map)));
+        vm.prank(fulfiller);
+        market.fulfill(user, delay, mask, target, cap_map, id, nonce);
+
+        req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, 0, "req.reward not reset");
+        assertEq(req.initiated_refund_at, 0, "req.initiated_refund_at not reset");
+
+        assertEq(market.claimable_eth(), value, "claimable eth not accounted");
+
+        vm.prank(request_owner);
+        market.claim_eth();
+
+        assertEq(request_owner.balance, value, "claimable eth not transferred");
+        assertEq(market.claimable_eth(), 0, "claimable eth not reset");
+    }
+
+    function test_refund() public {
+        address user = makeAddr("user");
+        uint256 value = 1.21 ether;
+        uint32 delay = 3 days;
+        uint160 mask = 0x0000000000000000000000000000000000000fff00;
+        uint160 target = 0x0000000000000000000000000000000000000a0a00;
+        uint80 cap_map = _strToCapMap("...................................U.U..");
+
+        assertEq(market.claimable_eth(), 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit NewRequest(
+            _pack(bytes20(user), uint96(value)),
+            _pack(bytes20(mask), uint96(delay)),
+            _pack(bytes20(target), uint96(cap_map))
+        );
+        hoax(user, value);
+        market.request{value: value}(delay, mask, target, cap_map);
+
+        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, value, "req.reward != value");
+        assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
+        assertEq(user.balance, 0, "balance not empty");
+
+        vm.expectEmit(true, true, true, true);
+        emit RefundInitiated(_id(_request_state(user, delay, mask, target, cap_map)));
+        vm.prank(user);
+        market.initiate_refund(delay, mask, target, cap_map);
+
+        req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, value, "req.reward != value (post refund init)");
+        assertEq(req.initiated_refund_at, block.timestamp, "refund not initiated");
+
+        skip(delay / 3);
+        vm.expectRevert(RefundStillInProgress.selector);
+        vm.prank(user);
+        market.complete_refund(delay, mask, target, cap_map);
+
+        skip(delay);
+        vm.expectEmit(true, true, true, true);
+        emit RefundCompleted(_id(_request_state(user, delay, mask, target, cap_map)));
+        vm.prank(user);
+        market.complete_refund(delay, mask, target, cap_map);
+
+        req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, 0, "req.reward != value (post refund init)");
+        assertEq(req.initiated_refund_at, 0, "refund not initiated");
+
+        assertEq(user.balance, value);
+    }
+
+    function test_fulfill_while_refund() public {
+        address user = makeAddr("user");
+        uint256 value = 1.21 ether;
+        uint32 delay = 3 days;
+        uint160 mask = 0x0000000000000000000000000000000000000fff00;
+        uint160 target = 0x0000000000000000000000000000000000000a0a00;
+        uint80 cap_map = _strToCapMap("...................................U.U..");
+
+        assertEq(market.claimable_eth(), 0);
+
+        vm.expectEmit(true, true, true, true);
+        emit NewRequest(
+            _pack(bytes20(user), uint96(value)),
+            _pack(bytes20(mask), uint96(delay)),
+            _pack(bytes20(target), uint96(cap_map))
+        );
+        hoax(user, value);
+        market.request{value: value}(delay, mask, target, cap_map);
+
+        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, value, "req.reward != value");
+        assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
+        assertEq(user.balance, 0, "balance not empty");
+
+        vm.expectEmit(true, true, true, true);
+        emit RefundInitiated(_id(_request_state(user, delay, mask, target, cap_map)));
+        vm.prank(user);
+        market.initiate_refund(delay, mask, target, cap_map);
+
+        req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, value, "req.reward != value (post refund init)");
+        assertEq(req.initiated_refund_at, block.timestamp, "refund not initiated");
+
+        (uint256 id, uint8 nonce) = _mine(fulfiller, mask, target, cap_map);
+
+        vm.expectEmit(true, true, true, true);
+        emit Fulfilled(_id(_request_state(user, delay, mask, target, cap_map)));
+        vm.prank(fulfiller);
+        market.fulfill(user, delay, mask, target, cap_map, id, nonce);
+
+        req = market.get_request(user, delay, mask, target, cap_map);
+        assertEq(req.reward, 0, "req.reward not reset");
+        assertEq(req.initiated_refund_at, 0, "req.timestamp not reset");
+
+        skip(delay);
+
+        vm.expectRevert(EmptyRequest.selector);
+        vm.prank(user);
+        market.complete_refund(delay, mask, target, cap_map);
     }
 
     function test_fuzzing_request_state(
@@ -90,11 +238,11 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
             bytes1 char = checksummed[i + 2];
 
             Caps cap = caps[i];
-            console.log(
-                "'%s': %s",
-                string(bytes.concat(char)),
-                cap == Caps.None ? "None" : cap == Caps.Lower ? "Lower" : "Upper"
-            );
+            // console.log(
+            //     "'%s': %s",
+            //     string(bytes.concat(char)),
+            //     cap == Caps.None ? "None" : cap == Caps.Lower ? "Lower" : "Upper"
+            // );
 
             if (cap == Caps.None) continue;
 
@@ -116,8 +264,48 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
         return ((data & variant) << 1) | variant;
     }
 
+    function _mine(address owner, uint160 mask, uint160 target, uint80 cap_map)
+        internal
+        pure
+        returns (uint256, uint8)
+    {
+        uint256 id = uint256(uint160(owner)) << 96;
+
+        while (true) {
+            address deployProxy = Create2Lib.predict(DEPLOY_PROXY_INITHASH, bytes32(id), address(VANITY_MARKET));
+            for (uint256 nonce = 1; nonce < 256; nonce++) {
+                address vanity = LibRLP.computeAddress(deployProxy, uint8(nonce));
+                if (_satisfies_request(vanity, mask, target, cap_map)) {
+                    return (id, uint8(nonce) - 1);
+                }
+            }
+            id++;
+        }
+        revert("unreachable");
+    }
+
+    function _strToCapMap(string memory str) internal pure returns (uint80 cap_map) {
+        bytes memory b = bytes(str);
+        require(b.length == 40, "String must be exactly 40 characters long");
+        for (uint256 i = 0; i < 20; i++) {
+            uint80 g1 = _charToCaps(b[i]);
+            uint80 g2 = _charToCaps(b[i + 20]);
+            cap_map |= ((g1 << 2) | g2) << uint80((19 - i) * 4);
+        }
+    }
+
+    function _charToCaps(bytes1 char) internal pure returns (uint80) {
+        if (char == "U") return 3;
+        if (char == "L" || char == "l") return 1;
+        return 0;
+    }
+
     function _toCap(uint256 two) internal pure returns (Caps c) {
         if (two & 1 == 0) return Caps.None;
         return two & 2 == 0 ? Caps.Lower : Caps.Upper;
+    }
+
+    function _pack(bytes20 x1, uint96 x2) internal pure returns (uint256) {
+        return uint256(bytes32(bytes.concat(x1, bytes12(x2))));
     }
 }

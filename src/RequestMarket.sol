@@ -40,15 +40,17 @@ contract RequestMarket is Ownable {
     error RequestMissingOrNotLocked();
     error RefundStillInProgress();
 
-    uint256 internal claimable_eth;
+    uint248 internal _claimable_eth;
+    uint8 internal _claimable_eth__padding = 1;
 
     constructor(address initialOwner) {
         _initializeOwner(initialOwner);
     }
 
     function claim_eth() external {
-        uint256 amount = claimable_eth;
-        claimable_eth = 0;
+        _checkOwner();
+        uint256 amount = claimable_eth();
+        _claimable_eth = 0;
         msg.sender.safeTransferETH(amount);
     }
 
@@ -80,13 +82,12 @@ contract RequestMarket is Ownable {
     ) external {
         RequestState storage state =
             _request_state(owner, unlock_delay, address_mask, address_target, capitalization_map);
-        uint256 reward = state.reward;
+        uint248 reward = state.reward;
         if (reward == 0) revert EmptyRequest();
         address addr = _compute_address(bytes32(id), nonce);
         if (!_satisfies_request(addr, address_mask, address_target, capitalization_map)) revert RequestNotSatisfied();
-        unchecked {
-            claimable_eth += reward;
-        }
+
+        _claimable_eth += reward;
         _delete(state);
 
         emit Fulfilled(_id(state));
@@ -109,7 +110,7 @@ contract RequestMarket is Ownable {
     }
 
     /**
-     * @dev Triggers a refund that's passed it's unlock period, NOTE: until this is called the
+     * @dev Triggers a refund that's passed its unlock period, NOTE: until this is called the
      * request may still be filled.
      */
     function complete_refund(
@@ -123,12 +124,26 @@ contract RequestMarket is Ownable {
         uint256 initiated_refund_at = state.initiated_refund_at;
         uint256 reward = state.reward;
         if (initiated_refund_at == 0) revert EmptyRequest();
-        if (!(block.timestamp <= initiated_refund_at + unlock_delay)) revert RefundStillInProgress();
+        if (!(block.timestamp >= initiated_refund_at + unlock_delay)) revert RefundStillInProgress();
         _delete(state);
 
         emit RefundCompleted(_id(state));
 
         msg.sender.safeTransferETH(reward);
+    }
+
+    function claimable_eth() public view returns (uint256) {
+        return _claimable_eth;
+    }
+
+    function get_request(
+        address owner,
+        uint32 unlock_delay,
+        uint160 address_mask,
+        uint160 address_target,
+        uint80 capitalization_map
+    ) public view returns (RequestState memory) {
+        return _request_state(owner, unlock_delay, address_mask, address_target, capitalization_map);
     }
 
     function _request_state(
@@ -177,7 +192,7 @@ contract RequestMarket is Ownable {
 
         uint256 checksum_hash;
         assembly ("memory-safe") {
-            // forgefmt: disable-start
+            // Translate first 8/40 nibbles to ascii
             let alphabet := 0x3031323334353637383961626364656600000000000000000000000000000000
             mstore8(0, byte(and(shr(156, to_be_minted), 0xf), alphabet))
             mstore8(1, byte(and(shr(152, to_be_minted), 0xf), alphabet))
@@ -187,7 +202,6 @@ contract RequestMarket is Ownable {
             mstore8(5, byte(and(shr(136, to_be_minted), 0xf), alphabet))
             mstore8(6, byte(and(shr(132, to_be_minted), 0xf), alphabet))
             mstore8(7, byte(and(shr(128, to_be_minted), 0xf), alphabet))
-            // forgefmt: disable-end
 
             // Spread remaining nibbles [8..40] into their own bytes.
             let w := to_be_minted
@@ -281,7 +295,7 @@ contract RequestMarket is Ownable {
          * ==============================================
          *     0       0     |       any character      |
          *     0       1     |  only lowercase / digit  |
-         *     1       0     |       always invalid     |
+         *     1       0     |      always invalid      |
          *     1       1     |      only uppercase      |
          *
          * Note: The `capitalization_map` cannot enforce something to be lowercase & a letter,
