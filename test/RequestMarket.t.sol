@@ -17,7 +17,7 @@ import {console} from "forge-std/console.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutalizer {
-    VanityMarket constant MARKET = VanityMarket(payable(0x000000000000b361194cfe6312EE3210d53C15AA));
+    VanityMarket constant FACTORY = VanityMarket(payable(0x000000000000b361194cfe6312EE3210d53C15AA));
     address market_owner = 0xea57c1ef7eF1c88b456ADf0927ec0EAe3B17f1F5;
 
     address fulfiller = makeAddr("fulfiller");
@@ -31,12 +31,12 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
             deployCodeTo("VanityMarket.sol", abi.encode(market_owner), address(VANITY_MARKET));
         }
         // refetch owner in case changed from initial
-        vm.label(market_owner = MARKET.owner(), "market_owner");
+        vm.label(market_owner = FACTORY.owner(), "market_owner");
 
         market = new RequestMarket(request_owner);
 
         vm.prank(fulfiller);
-        MARKET.setApprovalForAll(address(market), true);
+        FACTORY.setApprovalForAll(address(market), true);
     }
 
     enum Caps {
@@ -216,7 +216,7 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
     function test_fuzzing_compute_address(bytes32 salt, uint256 nonce) public view {
         uint8 nonce8 = uint8(bound(nonce, 0, 254));
-        assertEq(_compute_address(salt, nonce8), MARKET.computeAddress(salt, nonce8));
+        assertEq(_compute_address(salt, nonce8), FACTORY.computeAddress(salt, nonce8));
     }
 
     function test_fuzzing_capsPatternSatisfied(address addr, uint80 capitalization_map) public pure {

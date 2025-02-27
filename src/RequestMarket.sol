@@ -7,8 +7,6 @@ import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {Ownable} from "solady/src/auth/Ownable.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
 
-import {console} from "forge-std/console.sol";
-
 /// @author philogy <https://github.com/philogy>
 contract RequestMarket is Ownable {
     using SafeTransferLib for address;
