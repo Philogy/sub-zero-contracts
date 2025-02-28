@@ -6,6 +6,7 @@ import {Create2Lib} from "./utils/Create2Lib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {Ownable} from "solady/src/auth/Ownable.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
+import {NonZeroUint, ZERO} from "./utils/NonZeroUint.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract RequestMarket is Ownable {
@@ -42,6 +43,7 @@ contract RequestMarket is Ownable {
     // @dev Intended to be packed into same slot with `_claimable_eth` and ensures that slot is
     // never set to 0 to ensure that fulfilling is always maximally cheap.
     uint8 internal _claimable_eth__padding = 1;
+    NonZeroUint internal _claimable_eth = ZERO;
 
     constructor(address initialOwner) {
         _initializeOwner(initialOwner);
@@ -50,7 +52,7 @@ contract RequestMarket is Ownable {
     function claim_eth() external {
         _checkOwner();
         uint256 amount = claimable_eth();
-        _claimable_eth = 0;
+        _claimable_eth = ZERO;
         msg.sender.safeTransferETH(amount);
     }
 
@@ -82,12 +84,12 @@ contract RequestMarket is Ownable {
     ) external {
         RequestState storage state =
             _request_state(owner, unlock_delay, address_mask, address_target, capitalization_map);
-        uint248 reward = state.reward;
+        uint256 reward = state.reward;
         if (reward == 0) revert EmptyRequest();
         address addr = _compute_address(bytes32(id), nonce);
         if (!_satisfies_request(addr, address_mask, address_target, capitalization_map)) revert RequestNotSatisfied();
 
-        _claimable_eth += reward;
+        _claimable_eth = _claimable_eth.checked_add(reward);
         _delete(state);
 
         emit Fulfilled(_id(state));
@@ -133,7 +135,7 @@ contract RequestMarket is Ownable {
     }
 
     function claimable_eth() public view returns (uint256) {
-        return _claimable_eth;
+        return _claimable_eth.into();
     }
 
     function get_request(
