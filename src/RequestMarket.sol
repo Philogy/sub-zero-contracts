@@ -39,6 +39,8 @@ contract RequestMarket is Ownable {
     error RefundStillInProgress();
 
     uint248 internal _claimable_eth;
+    // @dev Intended to be packed into same slot with `_claimable_eth` and ensures that slot is
+    // never set to 0 to ensure that fulfilling is always maximally cheap.
     uint8 internal _claimable_eth__padding = 1;
 
     constructor(address initialOwner) {
