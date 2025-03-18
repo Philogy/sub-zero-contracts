@@ -45,7 +45,7 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
         Upper
     }
 
-    function test_fulfill() public {
+    function test_fuzzing_fulfill(uint32 req_nonce) public {
         address user = makeAddr("user");
         uint256 value = 1 ether;
         uint32 delay = 1 days;
@@ -57,25 +57,23 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
         vm.expectEmit(true, true, true, true);
         emit NewRequest(
-            _pack(bytes20(user), uint96(value)),
-            _pack(bytes20(mask), uint96(delay)),
-            _pack(bytes20(target), uint96(cap_map))
+            _pack(bytes20(user), uint96(value)), _pack(bytes20(mask), req_nonce, delay), _pack(bytes20(target), cap_map)
         );
         hoax(user, value);
-        market.request{value: value}(delay, mask, target, cap_map);
+        market.request{value: value}(req_nonce, delay, mask, target, cap_map);
 
-        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        (, RequestState memory req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, value, "req.reward != value");
         assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
 
-        (uint256 id, uint8 nonce) = _mine(fulfiller, mask, target, cap_map);
+        (uint256 id, uint8 addr_nonce) = _mine(fulfiller, mask, target, cap_map);
 
         vm.expectEmit(true, true, true, true);
-        emit Fulfilled(_id(_request_state(user, delay, mask, target, cap_map)));
+        emit Fulfilled(_id(_request_state(user, req_nonce, delay, mask, target, cap_map)));
         vm.prank(fulfiller);
-        market.fulfill(user, delay, mask, target, cap_map, id, nonce);
+        market.fulfill(user, req_nonce, delay, mask, target, cap_map, id, addr_nonce);
 
-        req = market.get_request(user, delay, mask, target, cap_map);
+        (, req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, 0, "req.reward not reset");
         assertEq(req.initiated_refund_at, 0, "req.initiated_refund_at not reset");
 
@@ -88,7 +86,7 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
         assertEq(market.claimable_eth(), 0, "claimable eth not reset");
     }
 
-    function test_refund() public {
+    function test_fuzzing_refund(uint32 req_nonce) public {
         address user = makeAddr("user");
         uint256 value = 1.21 ether;
         uint32 delay = 3 days;
@@ -100,46 +98,47 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
         vm.expectEmit(true, true, true, true);
         emit NewRequest(
-            _pack(bytes20(user), uint96(value)),
-            _pack(bytes20(mask), uint96(delay)),
-            _pack(bytes20(target), uint96(cap_map))
+            _pack(bytes20(user), uint96(value)), _pack(bytes20(mask), req_nonce, delay), _pack(bytes20(target), cap_map)
         );
         hoax(user, value);
-        market.request{value: value}(delay, mask, target, cap_map);
+        market.request{value: value}(req_nonce, delay, mask, target, cap_map);
 
-        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        (bytes32 id_out, RequestState memory req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, value, "req.reward != value");
         assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
         assertEq(user.balance, 0, "balance not empty");
 
         vm.expectEmit(true, true, true, true);
-        emit RefundInitiated(_id(_request_state(user, delay, mask, target, cap_map)));
+        bytes32 id = _id(_request_state(user, req_nonce, delay, mask, target, cap_map));
+        assertEq(id, id_out);
+        emit RefundInitiated(id);
         vm.prank(user);
-        market.initiate_refund(delay, mask, target, cap_map);
+        market.initiate_refund(req_nonce, delay, mask, target, cap_map);
 
-        req = market.get_request(user, delay, mask, target, cap_map);
+        (, req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, value, "req.reward != value (post refund init)");
         assertEq(req.initiated_refund_at, block.timestamp, "refund not initiated");
 
         skip(delay / 3);
         vm.expectRevert(RefundStillInProgress.selector);
         vm.prank(user);
-        market.complete_refund(delay, mask, target, cap_map);
+        market.complete_refund(req_nonce, delay, mask, target, cap_map);
 
         skip(delay);
         vm.expectEmit(true, true, true, true);
-        emit RefundCompleted(_id(_request_state(user, delay, mask, target, cap_map)));
+        emit RefundCompleted(_id(_request_state(user, req_nonce, delay, mask, target, cap_map)));
         vm.prank(user);
-        market.complete_refund(delay, mask, target, cap_map);
+        market.complete_refund(req_nonce, delay, mask, target, cap_map);
 
-        req = market.get_request(user, delay, mask, target, cap_map);
+        (id_out, req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
+        assertEq(id_out, id);
         assertEq(req.reward, 0, "req.reward != value (post refund init)");
         assertEq(req.initiated_refund_at, 0, "refund not initiated");
 
         assertEq(user.balance, value);
     }
 
-    function test_fulfill_while_refund() public {
+    function test_fuzzing_fulfill_while_refund(uint32 req_nonce) public {
         address user = makeAddr("user");
         uint256 value = 1.21 ether;
         uint32 delay = 3 days;
@@ -151,35 +150,33 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
         vm.expectEmit(true, true, true, true);
         emit NewRequest(
-            _pack(bytes20(user), uint96(value)),
-            _pack(bytes20(mask), uint96(delay)),
-            _pack(bytes20(target), uint96(cap_map))
+            _pack(bytes20(user), uint96(value)), _pack(bytes20(mask), req_nonce, delay), _pack(bytes20(target), cap_map)
         );
         hoax(user, value);
-        market.request{value: value}(delay, mask, target, cap_map);
+        market.request{value: value}(req_nonce, delay, mask, target, cap_map);
 
-        RequestState memory req = market.get_request(user, delay, mask, target, cap_map);
+        (, RequestState memory req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, value, "req.reward != value");
         assertEq(req.initiated_refund_at, REQUEST_LOCKED, "req not locked");
         assertEq(user.balance, 0, "balance not empty");
 
         vm.expectEmit(true, true, true, true);
-        emit RefundInitiated(_id(_request_state(user, delay, mask, target, cap_map)));
+        emit RefundInitiated(_id(_request_state(user, req_nonce, delay, mask, target, cap_map)));
         vm.prank(user);
-        market.initiate_refund(delay, mask, target, cap_map);
+        market.initiate_refund(req_nonce, delay, mask, target, cap_map);
 
-        req = market.get_request(user, delay, mask, target, cap_map);
+        (, req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, value, "req.reward != value (post refund init)");
         assertEq(req.initiated_refund_at, block.timestamp, "refund not initiated");
 
-        (uint256 id, uint8 nonce) = _mine(fulfiller, mask, target, cap_map);
+        (uint256 id, uint8 addr_nonce) = _mine(fulfiller, mask, target, cap_map);
 
         vm.expectEmit(true, true, true, true);
-        emit Fulfilled(_id(_request_state(user, delay, mask, target, cap_map)));
+        emit Fulfilled(_id(_request_state(user, req_nonce, delay, mask, target, cap_map)));
         vm.prank(fulfiller);
-        market.fulfill(user, delay, mask, target, cap_map, id, nonce);
+        market.fulfill(user, req_nonce, delay, mask, target, cap_map, id, addr_nonce);
 
-        req = market.get_request(user, delay, mask, target, cap_map);
+        (, req) = market.get_request(user, req_nonce, delay, mask, target, cap_map);
         assertEq(req.reward, 0, "req.reward not reset");
         assertEq(req.initiated_refund_at, 0, "req.timestamp not reset");
 
@@ -187,11 +184,12 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
         vm.expectRevert(EmptyRequest.selector);
         vm.prank(user);
-        market.complete_refund(delay, mask, target, cap_map);
+        market.complete_refund(req_nonce, delay, mask, target, cap_map);
     }
 
     function test_fuzzing_request_state(
         address owner_,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
@@ -199,6 +197,7 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
     ) public view brutalizeMemory {
         RequestState storage state = _request_state(
             _brutalized(owner_),
+            _brutalizedUint32(req_nonce),
             _brutalizedUint32(unlock_delay),
             _brutalizedUint160(address_mask),
             _brutalizedUint160(address_target),
@@ -208,7 +207,13 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
             _id(state),
             keccak256(
                 abi.encodePacked(
-                    owner_, unlock_delay, address_mask, address_target, capitalization_map, uint32(_REQUEST_STATE_SLOT)
+                    owner_,
+                    req_nonce,
+                    unlock_delay,
+                    address_mask,
+                    address_target,
+                    capitalization_map,
+                    uint32(_REQUEST_STATE_SLOT)
                 )
             )
         );
@@ -307,5 +312,9 @@ contract RequestMarketTest is Test, HuffTest, RequestMarket(address(0)), Brutali
 
     function _pack(bytes20 x1, uint96 x2) internal pure returns (uint256) {
         return uint256(bytes32(bytes.concat(x1, bytes12(x2))));
+    }
+
+    function _pack(bytes20 x1, uint32 x2, uint32 x3) internal pure returns (uint256) {
+        return uint256(bytes32(bytes.concat(x1, bytes4(0x0000), bytes4(x2), bytes4(x3))));
     }
 }

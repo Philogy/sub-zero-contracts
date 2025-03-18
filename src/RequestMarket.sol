@@ -6,6 +6,7 @@ import {Create2Lib} from "./utils/Create2Lib.sol";
 import {LibRLP} from "solady/src/utils/LibRLP.sol";
 import {Ownable} from "solady/src/auth/Ownable.sol";
 import {SafeTransferLib} from "solady/src/utils/SafeTransferLib.sol";
+import {SafeCastLib} from "solady/src/utils/SafeCastLib.sol";
 
 /// @author philogy <https://github.com/philogy>
 contract RequestMarket is Ownable {
@@ -54,37 +55,42 @@ contract RequestMarket is Ownable {
         msg.sender.safeTransferETH(amount);
     }
 
-    function request(uint32 unlock_delay, uint160 address_mask, uint160 address_target, uint80 capitalization_map)
-        external
-        payable
-    {
+    function request(
+        uint32 nonce,
+        uint32 unlock_delay,
+        uint160 address_mask,
+        uint160 address_target,
+        uint80 capitalization_map
+    ) external payable {
         if (unlock_delay > MAX_UNLOCK_DELAY) revert UnlockDelayAboveMax();
         RequestState storage state =
-            _request_state(msg.sender, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+        // If cast to `uint128` overflows later safe cast to uint96 will catch.
         state.reward += uint128(msg.value);
         state.initiated_refund_at = REQUEST_LOCKED;
 
         emit NewRequest(
-            (uint256(uint160(msg.sender)) << 96) | uint96(msg.value),
-            (uint256(address_mask) << 96) | unlock_delay,
+            (uint256(uint160(msg.sender)) << 96) | SafeCastLib.toUint96(msg.value),
+            (uint256(address_mask) << 96) | (uint256(nonce) << 32) | unlock_delay,
             (uint256(address_target) << 96) | capitalization_map
         );
     }
 
     function fulfill(
         address owner,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map,
         uint256 id,
-        uint8 nonce
+        uint8 addr_nonce
     ) external {
         RequestState storage state =
-            _request_state(owner, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(owner, req_nonce, unlock_delay, address_mask, address_target, capitalization_map);
         uint248 reward = state.reward;
         if (reward == 0) revert EmptyRequest();
-        address addr = _compute_address(bytes32(id), nonce);
+        address addr = _compute_address(bytes32(id), addr_nonce);
         if (!_satisfies_request(addr, address_mask, address_target, capitalization_map)) revert RequestNotSatisfied();
 
         _claimable_eth += reward;
@@ -92,17 +98,18 @@ contract RequestMarket is Ownable {
 
         emit Fulfilled(_id(state));
 
-        VANITY_MARKET.mint(owner, id, nonce);
+        VANITY_MARKET.mint(owner, id, addr_nonce);
     }
 
     function initiate_refund(
+        uint32 nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
     ) external {
         RequestState storage state =
-            _request_state(msg.sender, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
         if (state.initiated_refund_at != REQUEST_LOCKED) revert RequestMissingOrNotLocked();
         state.initiated_refund_at = uint64(block.timestamp);
 
@@ -114,13 +121,14 @@ contract RequestMarket is Ownable {
      * request may still be filled.
      */
     function complete_refund(
+        uint32 nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
     ) external {
         RequestState storage state =
-            _request_state(msg.sender, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
         uint256 initiated_refund_at = state.initiated_refund_at;
         uint256 reward = state.reward;
         if (initiated_refund_at == 0) revert EmptyRequest();
@@ -138,16 +146,21 @@ contract RequestMarket is Ownable {
 
     function get_request(
         address owner,
+        uint32 nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
-    ) public view returns (RequestState memory) {
-        return _request_state(owner, unlock_delay, address_mask, address_target, capitalization_map);
+    ) public view returns (bytes32 id, RequestState memory loadedState) {
+        RequestState storage state =
+            _request_state(owner, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+        id = _id(state);
+        loadedState = state;
     }
 
     function _request_state(
         address owner,
+        uint32 nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
@@ -160,8 +173,9 @@ contract RequestMarket is Ownable {
             mstore(50, address_target)
             mstore(30, address_mask)
             mstore(10, unlock_delay)
-            mstore(6, owner)
-            state.slot := keccak256(18, 78)
+            mstore(6, nonce)
+            mstore(2, owner)
+            state.slot := keccak256(14, 82)
             mstore(0x40, fmp)
         }
     }
