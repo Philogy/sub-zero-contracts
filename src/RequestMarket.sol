@@ -56,7 +56,7 @@ contract RequestMarket is Ownable {
     }
 
     function request(
-        uint32 nonce,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
@@ -64,14 +64,14 @@ contract RequestMarket is Ownable {
     ) external payable {
         if (unlock_delay > MAX_UNLOCK_DELAY) revert UnlockDelayAboveMax();
         RequestState storage state =
-            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, req_nonce, unlock_delay, address_mask, address_target, capitalization_map);
         // If cast to `uint128` overflows later safe cast to uint96 will catch.
         state.reward += uint128(msg.value);
         state.initiated_refund_at = REQUEST_LOCKED;
 
         emit NewRequest(
             (uint256(uint160(msg.sender)) << 96) | SafeCastLib.toUint96(msg.value),
-            (uint256(address_mask) << 96) | (uint256(nonce) << 32) | unlock_delay,
+            (uint256(address_mask) << 96) | (uint256(req_nonce) << 32) | unlock_delay,
             (uint256(address_target) << 96) | capitalization_map
         );
     }
@@ -102,14 +102,14 @@ contract RequestMarket is Ownable {
     }
 
     function initiate_refund(
-        uint32 nonce,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
     ) external {
         RequestState storage state =
-            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, req_nonce, unlock_delay, address_mask, address_target, capitalization_map);
         if (state.initiated_refund_at != REQUEST_LOCKED) revert RequestMissingOrNotLocked();
         state.initiated_refund_at = uint64(block.timestamp);
 
@@ -121,14 +121,14 @@ contract RequestMarket is Ownable {
      * request may still be filled.
      */
     function complete_refund(
-        uint32 nonce,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
     ) external {
         RequestState storage state =
-            _request_state(msg.sender, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(msg.sender, req_nonce, unlock_delay, address_mask, address_target, capitalization_map);
         uint256 initiated_refund_at = state.initiated_refund_at;
         uint256 reward = state.reward;
         if (initiated_refund_at == 0) revert EmptyRequest();
@@ -146,21 +146,21 @@ contract RequestMarket is Ownable {
 
     function get_request(
         address owner,
-        uint32 nonce,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
         uint80 capitalization_map
     ) public view returns (bytes32 id, RequestState memory loadedState) {
         RequestState storage state =
-            _request_state(owner, nonce, unlock_delay, address_mask, address_target, capitalization_map);
+            _request_state(owner, req_nonce, unlock_delay, address_mask, address_target, capitalization_map);
         id = _id(state);
         loadedState = state;
     }
 
     function _request_state(
         address owner,
-        uint32 nonce,
+        uint32 req_nonce,
         uint32 unlock_delay,
         uint160 address_mask,
         uint160 address_target,
@@ -173,7 +173,7 @@ contract RequestMarket is Ownable {
             mstore(50, address_target)
             mstore(30, address_mask)
             mstore(10, unlock_delay)
-            mstore(6, nonce)
+            mstore(6, req_nonce)
             mstore(2, owner)
             state.slot := keccak256(14, 82)
             mstore(0x40, fmp)
@@ -327,8 +327,8 @@ contract RequestMarket is Ownable {
         return ((is_upper_map & capitalization_map) ^ (capitalization_map >> 1)) & CAP_MAP_MASK == 0;
     }
 
-    function _compute_address(bytes32 salt, uint8 nonce) internal pure returns (address vanity) {
+    function _compute_address(bytes32 salt, uint8 addr_nonce) internal pure returns (address vanity) {
         address deployProxy = Create2Lib.predict(DEPLOY_PROXY_INITHASH, salt, address(VANITY_MARKET));
-        vanity = LibRLP.computeAddress(deployProxy, nonce + 1);
+        vanity = LibRLP.computeAddress(deployProxy, addr_nonce + 1);
     }
 }
