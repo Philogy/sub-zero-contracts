@@ -19,7 +19,7 @@ contract RequestMarket is Ownable {
 
     event NewRequest(
         uint256 packed_amount_owner,
-        uint256 packed_address_mask_unlock_delay,
+        uint256 packed_address_mask_req_nonce_unlock_delay,
         uint256 packed_address_target_capitalization_map
     );
     event Fulfilled(bytes32 id);
