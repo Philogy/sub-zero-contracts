@@ -34,6 +34,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Fraxtal
 - Polygon POS
 - Polygon zkEVM
+- Katana
 - Immutable zkEVM
 
 ## License
