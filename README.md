@@ -21,8 +21,6 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 |Nonce Increaser|0x00000000000001e4a82b33373de1334e7d8f4879|
 
 **Deployed to chains**
-- Sepolia
-- Sepolia Base
 - Ethereum Mainnet
 - Base
 - Optimism Mainnet
@@ -35,6 +33,9 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Polygon POS
 - Polygon zkEVM
 - Katana
+- Sepolia
+- Sepolia Base
+- Unichain Sepolia
 
 ## License
 
