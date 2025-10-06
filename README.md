@@ -16,9 +16,9 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 
 |Contract|Address|
 |--------|-------|
-|Vanity Market|0x000000000000b361194cfe6312ee3210d53c15aa|
+|Vanity Market|0x000000000000b361194cfe6312EE3210d53C15AA|
 |Micro Create2 Factory|0x6D9FB3C412a269Df566a5c92b85a8dc334F0A797|
-|Nonce Increaser|0x00000000000001e4a82b33373de1334e7d8f4879|
+|Nonce Increaser|0x00000000000001E4A82b33373DE1334E7d8F4879|
 
 **Deployed to chains**
 - Ethereum Mainnet
