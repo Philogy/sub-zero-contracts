@@ -8,11 +8,11 @@
 The contracts can trustlessly be deployed to their addresses on any chains that has a
 [CreateX](https://github.com/pcaversaccio/createx) deployment using the command:
 
-```
+```bash
 forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_ADDR> --rpc-url <RPC_URL> --interactives 1
 ```
 
-**Main Addresses**
+### Main Addresses
 
 |Contract|Address|
 |--------|-------|
@@ -20,25 +20,32 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 |Micro Create2 Factory|0x6D9FB3C412a269Df566a5c92b85a8dc334F0A797|
 |Nonce Increaser|0x00000000000001E4A82b33373DE1334E7d8F4879|
 
-**Deployed to chains**
-- Ethereum Mainnet
-- Base
-- Optimism Mainnet
-- Arbitrum One
-- Avalanche C-chain
-- Mantle
-- Blast
-- Binance Smart Chain
-- Fraxtal
-- Polygon POS
-- Polygon zkEVM
-- Katana
-- Sepolia
-- Sepolia Base
-- Unichain Sepolia
-- Plasma
-- Berachain
-- Sei
+### Mainnet
+
+- Ethereum (1)
+- Base (8453)
+- Optimism (10)
+- Arbitrum One (42161)
+- Avalanche C-Chain (43114)
+- Mantle (5000)
+- Blast (81457)
+- Binance Smart Chain (56)
+- Polygon PoS (137)
+- Polygon zkEVM (1101)
+- Katana (747474)
+- Unichain (130)
+- Plasma (9745)
+- Berachain (80094)
+- Sei (1329)
+
+### Testnet
+
+- Ethereum Sepolia (11155111)
+- Base Sepolia (84532)
+- Unichain Sepolia (1301)
+- Plasma Testnet (9746)
+- Berachain Bepolia (80069)
+- Sei Testnet (1328)
 
 ## License
 
@@ -48,7 +55,8 @@ consider them to be MIT licensed.
 
 ## Security
 
-**Known Issues**
+### Known Issues
+
 - deploy proxies persist post-deployment allowing reuse for other deployments, potentially with
   `msg.value > 0` making it behave incorrectly due to `CALLVALUE` being relied upon for pushing
   zeros: Not seen as an issue because the deploy proxy is only relied upon by the owner upon initial
