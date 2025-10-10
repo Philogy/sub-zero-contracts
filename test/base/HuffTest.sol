@@ -8,6 +8,7 @@ import {console2 as console} from "forge-std/console2.sol";
 contract HuffTest is Test {
     address internal constant MICRO_CREATE2 = 0x6D9FB3C412a269Df566a5c92b85a8dc334F0A797;
     address internal constant NONCE_INCREASER = 0x00000000000001E4A82b33373DE1334E7d8F4879;
+    address internal constant VANITY_MARKET = 0x000000000000b361194cfe6312EE3210d53C15AA;
 
     function setupBase_ffi() internal {
         string[] memory empty = new string[](1);
