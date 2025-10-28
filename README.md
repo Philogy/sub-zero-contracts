@@ -46,6 +46,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Plasma Testnet (9746)
 - Berachain Bepolia (80069)
 - Sei Testnet (1328)
+- Mega ETH (6342)
 
 ## License
 
