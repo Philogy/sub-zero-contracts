@@ -37,6 +37,10 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Plasma (9745)
 - Berachain (80094)
 - Sei (1329)
+- Monad (143)
+- Plume (98866)
+- Immutable zkEVM (13371)
+- Fraxtal (252)
 
 ### Testnet
 
