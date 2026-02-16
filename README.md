@@ -42,6 +42,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Immutable zkEVM (13371)
 - Fraxtal (252)
 - Citrea (4114)
+- Chiliz (88888)
 
 ### Testnet
 
@@ -52,6 +53,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Berachain Bepolia (80069)
 - Sei Testnet (1328)
 - Mega ETH (6342)
+- Chiliz Spicy (88882)
 
 ## License
 
