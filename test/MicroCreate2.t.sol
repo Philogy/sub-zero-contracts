@@ -16,17 +16,17 @@ contract MicroCreate2Test is Test, HuffTest {
     function test_ffi_inception() public {
         bytes memory c = _huffInitcode("src/micro-create2/MicroCreate2.huff");
         bytes32 salt = 0x736910e11ee80955bc66400158e50c2f7318633f228ac93e3edf7fe7f1341daf;
-        (bool success, bytes memory ret) = MICRO_CREATE2.call(abi.encodePacked(salt, c));
+        (bool success, bytes memory ret) = MICRO_CREATE2_ADDRESS.call(abi.encodePacked(salt, c));
         assertTrue(success);
         assertEq(ret.length, 32);
         address addr = abi.decode(ret, (address));
         assertEq(addr, _predict(salt, c));
-        assertEq(addr.code, MICRO_CREATE2.code);
+        assertEq(addr.code, MICRO_CREATE2_ADDRESS.code);
     }
 
     function test_failing() public {
         bytes32 salt = bytes32(0);
-        (bool success, bytes memory ret) = MICRO_CREATE2.call(abi.encodePacked(salt, type(FailingDeploy).creationCode));
+        (bool success, bytes memory ret) = MICRO_CREATE2_ADDRESS.call(abi.encodePacked(salt, type(FailingDeploy).creationCode));
         assertTrue(success);
         address addr = abi.decode(ret, (address));
         assertEq(addr, address(0));
@@ -37,7 +37,7 @@ contract MicroCreate2Test is Test, HuffTest {
         address dev = makeAddr("dev");
         address user = makeAddr("user");
         bytes memory initcode = abi.encodePacked(type(MockSimple).creationCode, abi.encode(dev));
-        (bool success, bytes memory ret) = MICRO_CREATE2.call(abi.encodePacked(salt, initcode));
+        (bool success, bytes memory ret) = MICRO_CREATE2_ADDRESS.call(abi.encodePacked(salt, initcode));
         assertTrue(success);
         assertEq(ret.length, 32);
         address addr = abi.decode(ret, (address));
@@ -49,7 +49,7 @@ contract MicroCreate2Test is Test, HuffTest {
     }
 
     function _predict(bytes32 salt, bytes memory initcode) internal pure returns (address) {
-        bytes32 hash = keccak256(abi.encodePacked(hex"ff", MICRO_CREATE2, salt, keccak256(initcode)));
+        bytes32 hash = keccak256(abi.encodePacked(hex"ff", MICRO_CREATE2_ADDRESS, salt, keccak256(initcode)));
         return address(uint160(uint256(hash)));
     }
 }
