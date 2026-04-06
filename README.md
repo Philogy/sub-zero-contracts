@@ -26,6 +26,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Base (8453)
 - Optimism (10)
 - Arbitrum One (42161)
+- Mega ETH (4326)
 - Avalanche C-Chain (43114)
 - Mantle (5000)
 - Blast (81457)
