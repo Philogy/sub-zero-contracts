@@ -6,7 +6,21 @@
 ## Deployments
 
 The contracts can trustlessly be deployed to their addresses on any chains that has a
-[CreateX](https://github.com/pcaversaccio/createx) deployment using the command:
+[CreateX](https://github.com/pcaversaccio/createx) deployment by following the instructions below.
+
+### Probe Deployment
+
+Before deploying the final contracts, a probe deployment is required to ensure the contracts are
+deployed to the expected addresses, and chain-specific rules (precompiles or known issues) don't
+affect the outcome.
+
+```bash
+forge script script/Deploy.s.sol:DeployProbeScript -vvv --broadcast --sender <WALLET_ADDR> --rpc-url <RPC_URL> --interactives 1
+```
+
+### Final Deployment
+
+Once the probe deployment is successful, the final deployment can be performed.
 
 ```bash
 forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_ADDR> --rpc-url <RPC_URL> --interactives 1
