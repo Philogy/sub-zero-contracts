@@ -43,6 +43,7 @@ forge script script/Deploy.s.sol:DeployScript -vvv --broadcast --sender <WALLET_
 - Immutable zkEVM (13371)
 - Fraxtal (252)
 - Citrea (4114)
+- Ink (57073)
 - Chiliz (88888)
 
 ### Testnet
