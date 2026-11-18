@@ -5,7 +5,7 @@
 
 ## Deployments
 
-The contracts can trustlessly be deployed to their addresses on any chains that has a
+The contracts can **permissionlessly** be deployed to their addresses on any chains that has a
 [CreateX](https://github.com/pcaversaccio/createx) deployment using the command:
 
 ```bash
